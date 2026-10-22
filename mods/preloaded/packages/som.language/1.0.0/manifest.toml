@@ -1,0 +1,35 @@
+format_version = 1
+id = "som.language"
+version = "1.0.0"
+name = "Language"
+author = "Mumble Translation (v2.0), packaged for this recompilation"
+description = "Plays the game in another language: the original ROM is patched in memory into the image this build was made from. The ROM file on disk is never modified."
+resolver = "declarative"
+
+# The original US release the patch applies to.
+[[target]]
+game_id = "secret-of-mana"
+rom_sha256 = "4c15013131351e694e05f22e38bb1b3e4031dedac77ec75abecebe8520d82d5f"
+
+# The translated ROM itself: the player may already own it, and then the
+# patch has nothing to do.
+[[target]]
+game_id = "secret-of-mana"
+rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
+
+
+[[feature]]
+id = "italian"
+name = "Italiano (Mumble Translation v2.0)"
+group = "Language"
+description = "Turns the original US ROM into the Italian one in memory, before the game starts. The result is checked against the image this executable was generated from, so a wrong patch refuses to run. Takes effect on the next launch."
+default_enabled = true
+
+# The patch itself. It rewrites the US release into the Italian one: the text,
+# the script and the graphics move, and the translation adds a megabyte of
+# banks. The reader grows the image for the banks it adds.
+[[patch]]
+feature = "italian"
+id = "t-it-v2"
+file = "secret-of-mana-italian-t-it-v2.ips"
+target_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"

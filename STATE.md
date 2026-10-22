@@ -26,7 +26,7 @@ In `snesrecomp/runner/src/generic_frame_driver.c`:
   `SNESRECOMP_TRACE_SPR=<frame>` (trace sprite: OAM risolto + word VRAM lette)
 - Build di produzione: `SNESRECOMP_TRACE=0` → **il debug server non esiste**; per OAM/PC usare i dump env-gated.
 
-## 3. Stato verificato oggi (confronti byte-per-byte rif/ref a f3410, Start f2500 + f3105)
+## 3. Lo stato verificato oggi (confronti byte-per-byte rif/ref a f3410, Start f2500 + f3105)
 
 **La name-entry è corretta**: presentata a 512×224 (hires nativo), il confronto con
 `work/mesen/tree/ref_name_3410.png` (512×448, righe pari) dà **0.00 % di pixel diversi**:
@@ -115,6 +115,15 @@ Script: `press X N` = N frame di pressione **+ 1 idle**; i tag dei dump possono 
 
 ## 6. Prossimi passi
 
+0. **Lingue** (2026-10-23, fatto per l'italiano): il launcher accetta il ROM **originale americano**;
+   il pacchetto `som.language` lo trasforma in memoria nell'immagine da cui è stato generato il codice
+   (IPS 160 KB, 5% dell'immagine; verificato: framebuffer/VRAM/WRAM/OAM/CGRAM/registri **identici** al
+   run con il ROM italiano). Restano:
+   - **ROM giapponese**: la traduzione italiana è basata sulla release **americana**; il JP differisce
+     del 92,8% ⇒ non è una patch byte-level ma un'altra build (disassembly diverso → ricompilazione).
+   - **altre lingue** (ES/PT/DE/FR/CN/KR…): il meccanismo è pronto (un IPS per lingua), ma ogni
+     traduzione *sposta il testo* ⇒ i puntatori al testo stanno nel codice ricompilato ⇒ serve una
+     build per lingua (la `config/` si riusa: le funzioni sono agli stessi indirizzi).
 1. **Ritardo di 1-2 frame dopo il primo Start**: piccolo, ma da spiegare (budget cicli del frame? costo
    dei polling in vblank?). La chiave di allineamento è lo scroll BG1 (le due timeline coincidono
    esattamente fino a f2550).

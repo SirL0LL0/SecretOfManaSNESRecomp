@@ -4,12 +4,17 @@ This project builds a desktop runner and a headless runner around generated SNES
 
 ## Reproducible build
 
-Requirements: CMake 3.20+, Ninja, Git, Python 3, and a C compiler. `dependencies.lock.json` pins the framework and UI Git commits, the SHA-256 hashes of the Secret of Mana IRQ task-switch and Mode 5 renderer patches, and the pinned SDL3 version and archive SHA-256. Checkout paths default to sibling folders `../snesrecomp` and `../snesrecomp/recomp-ui`.
+Requirements: CMake 3.20+, Ninja, Git, Python 3, and a C compiler. `dependencies.lock.json` pins the framework and UI Git commits, the SHA-256 hash of the Secret of Mana framework patch, and the pinned SDL3 version and archive SHA-256. Checkout paths default to sibling folders `../snesrecomp` and `../snesrecomp/recomp-ui`.
 
 Windows: `.\build.ps1`  
 macOS/Linux: `sh build.sh`
 
-Both scripts verify the dependency origins and exact revisions, apply the checked-in framework patches when needed, and verify their SHA-256 hashes before building. To use other checkout paths, set `SNESRECOMP_ROOT` and optionally `RECOMP_UI_ROOT`; the checkouts must still match the lock file. Outputs are `build/som_recomp` and `build/som_headless` (with `.exe` on Windows). SDL3 is fetched at the pinned version if no package is installed.
+Both scripts verify the dependency origins and exact revisions, apply the checked-in framework patch when needed, and verify its SHA-256 hash before building. To use other checkout paths, set `SNESRECOMP_ROOT` and optionally `RECOMP_UI_ROOT`; the checkouts must still match the lock file. Outputs are `build/som_recomp` and `build/som_headless` (with `.exe` on Windows). SDL3 is fetched at the pinned version if no package is installed.
+
+The ROM the executable was generated from is the Italian translation, and that is the digest the
+launcher checks first. The original US release is accepted as well (see **Mods → Language**): the
+launcher takes either, and the language package turns the US one into the image the code was made
+from, in memory.
 
 ## Measure recompilation coverage
 
@@ -38,6 +43,26 @@ Escape, or Select+Start on the pad (`[Controller] MenuGesture` in config.ini), o
 The host clock catches up after short hitches (up to four frames, the size of the audio cushion) instead of dropping the lost time. Audio is produced in guest time, so the dropped time used to drain the cushion every 10-25 seconds and each underflow faded the music out and back in. A longer stall still re-anchors the clock.
 
 ## Mods
+
+**Mods → Language → Italiano (Mumble Translation v2.0)** (on by default) lets the game run from the
+original US release: the launcher takes either the US ROM or the already-translated one, and the
+package in `mods/preloaded/packages/som.language/` turns the US release into the Italian image in
+memory, before `SnesInit`. The ROM file on disk is never modified. The patch is a byte-level IPS
+(160 KB, 5% of the image) and the result is checked against the SHA-256 of the image this executable
+was generated from, so a wrong patch refuses the launch instead of running half-translated.
+
+Why this works in a recompilation: the translation moves the text, the script and the graphics, and
+with them the *pointers* the code holds to them. Of the 124545 bytes the translation changes, 117
+fall inside recompiled code -- the text pointers and the place the decompressor was moved to. The code
+in this executable was generated from the translated ROM, so its pointers are already the
+translation's: the patched image is exactly the one the code expects, and the result is byte-identical
+to running with the translated ROM (verified: the framebuffer, VRAM, WRAM, OAM, CGRAM and the
+registers all match).
+
+A second language needs the same treatment *and* its own build of the generated code: a translation
+that puts the text somewhere else changes the addresses inside the recompiled code, so the image is
+not enough. The package format carries one IPS per language, and the launcher picks the language in
+the Mods page.
 
 **Mods → Music → Restore Unused Fanfares** (off by default) plays the two unused fanfares, for the Sea Hare's Tail and the Moogle Belt. It is Kethinov's patch, version 1.2, with its three records moved to where the Italian translation keeps them. The package is in `mods/preloaded/packages/som.restore-unused-fanfares/`. When the mod is enabled, `src/som_main.c` applies its IPS to the in-memory image before `SnesInit` and checks the result against the SHA-256 in the manifest. The ROM file on disk is never modified. The change takes effect at the next launch.
 

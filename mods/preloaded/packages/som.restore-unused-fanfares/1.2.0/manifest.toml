@@ -11,6 +11,13 @@ resolver = "declarative"
 game_id = "secret-of-mana"
 rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
 
+# The original US release the language pack starts from: the same game, before
+# the translation, which the pack turns into the image above in memory.
+[[target]]
+game_id = "secret-of-mana"
+rom_sha256 = "4c15013131351e694e05f22e38bb1b3e4031dedac77ec75abecebe8520d82d5f"
+
+
 [[feature]]
 id = "restore"
 name = "Restore Unused Fanfares"

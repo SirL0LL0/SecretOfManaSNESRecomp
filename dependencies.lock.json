@@ -21,13 +21,15 @@
   },
   "framework_patch": {
     "file": "patches/snesrecomp-som-intro-timing.patch",
-    "sha256": "0e167c8389e18a01d7529c13358aaa806cb4220ff0dfdb9d75f707bcf1c28f66",
+    "sha256": "96700d7944b1392931fe1a0f796be035a4427dd820487256e62d0d7947e03464",
     "applies_to": "dependencies.snesrecomp.revision",
     "contains": [
       "som-irq-task-switch",
       "mode5-renderer-fallback",
       "mode5-logical-output",
-      "intro-raster-journal"
+      "intro-raster-journal",
+      "multi-rom-identity",
+      "resizeable-rom-patch"
     ]
   }
 }

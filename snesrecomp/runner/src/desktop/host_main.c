@@ -245,6 +245,18 @@ static int DecodeRomIdentity(uint8_t sha_out[32], uint32_t *crc_out) {
   return 1;
 }
 
+/* Parse one 64-hex SHA-256 digest. Returns 0 when the text is not a digest,
+ * which the caller reads as "cannot verify" rather than "verified". */
+static int ParseSha256Hex(const char *hex, uint8_t out[32]) {
+  if (!hex || strlen(hex) != 64) return 0;
+  for (int i = 0; i < 32; i++) {
+    int hi = HexNibble(hex[i * 2]), lo = HexNibble(hex[i * 2 + 1]);
+    if (hi < 0 || lo < 0) return 0;
+    out[i] = (uint8_t)((hi << 4) | lo);
+  }
+  return 1;
+}
+
 /* Environment knobs: SNESRECOMP_<name>, then <env_prefix>_<name> so a port's
  * existing scripts and CI keep working after it adopts this host. */
 static const char *HostGetenv(const char *name) {
@@ -2710,10 +2722,35 @@ static int FindRomBesideExe(char *out, size_t cap) {
 /* ── The launcher, before boot and mid-game ──────────────────────────────── */
 
 /* The ROM this binary was generated from. File scope because both launcher
- * entries hand it to recomp-ui, and the console resolver checks against it. */
+ * entries hand it to recomp-ui, and the console resolver checks against it.
+ *
+ * g_rom_sha256s holds the whole accepted set: the digest the code was
+ * generated from first, then the extra digests the title declares (a base
+ * ROM that a language pack turns into that image in memory). */
+#define ROM_SHA256_MAX 8
 static uint8_t g_rom_sha256[32];
+static uint8_t g_rom_sha256s[ROM_SHA256_MAX][32];
+static int g_rom_num_sha256s;
 static uint32_t g_rom_crc32;
 static int g_rom_identity_ok;
+
+/* The digests this title accepts: the one the code was generated from, then
+ * the extra ones the title declares (a base ROM a language pack turns into
+ * that image in memory). Fills g_rom_sha256s and returns its size. */
+static int CollectRomSha256s(void) {
+  int n = 0;
+  if (g_rom_identity_ok && n < ROM_SHA256_MAX) {
+    memcpy(g_rom_sha256s[n++], g_rom_sha256, 32);
+  }
+  const char *const *extra = g_game->known_sha256_hex;
+  int num_extra = g_game->num_known_sha256;
+  for (int i = 0; i < num_extra && n < ROM_SHA256_MAX; i++) {
+    uint8_t digest[32];
+    if (!ParseSha256Hex(extra[i], digest)) continue;
+    memcpy(g_rom_sha256s[n++], digest, 32);
+  }
+  return n;
+}
 static const char *g_program_path;       /* argv[0]: keybinds.ini sits beside it */
 static const char *g_rom_path = "";      /* the running ROM, once resolved */
 static char g_mod_state_path[1100];      /* <catalog>/state.toml; "" without mods */
@@ -2850,9 +2887,9 @@ static void LauncherSeed(RecompLauncherCSettings *ls, RecompLauncherCGameInfo *g
   gi->num_players = game->num_players > 0 ? game->num_players : 1;
   gi->expected_crc = g_rom_crc32;
   gi->has_expected_crc = g_rom_identity_ok;
-  gi->known_sha256 = g_rom_identity_ok
-      ? (const uint8_t (*)[32])&g_rom_sha256 : NULL;
-  gi->num_known_sha256 = g_rom_identity_ok ? 1 : 0;
+  gi->known_sha256 = g_rom_num_sha256s
+      ? (const uint8_t (*)[32])g_rom_sha256s : NULL;
+  gi->num_known_sha256 = g_rom_num_sha256s;
   /* Additive: a title catalogued by SHA-1 sets these instead of, or as
    * well as, the SHA-256 above. */
   gi->known_sha1_hex = game->known_sha1_hex;
@@ -3673,9 +3710,11 @@ int snesrecomp_desktop_main(const SnesDesktopHostGame *game, int argc, char **ar
     char mods_dir[1024];
     if (config_file) snprintf(mods_dir, sizeof(mods_dir), SNES_MOD_CATALOG_ROOT);
     if (config_file || snesrecomp_exe_dir_path(SNES_MOD_CATALOG_ROOT, mods_dir, sizeof(mods_dir))) {
-      g_mods_ready = snes_mod_runtime_initialize_c(
+      g_mods_ready = snes_mod_runtime_initialize_multi_c(
           mods_dir, game->game_id,
-          game->expected_sha256_hex ? game->expected_sha256_hex : "");
+          game->expected_sha256_hex ? game->expected_sha256_hex : "",
+          game->known_sha256_hex,
+          game->num_known_sha256 > 0 ? game->num_known_sha256 : 0);
       if (!g_mods_ready)
         fprintf(stderr, "mods: unavailable: %s\n", snes_mod_runtime_last_error_c());
       else
@@ -3691,6 +3730,7 @@ int snesrecomp_desktop_main(const SnesDesktopHostGame *game, int argc, char **ar
   static char rom_path_buf[1024];
   {
     g_rom_identity_ok = DecodeRomIdentity(g_rom_sha256, &g_rom_crc32);
+    g_rom_num_sha256s = CollectRomSha256s();
     int rom_resolved_by_launcher = 0;
     char beside_exe[1024] = "";
     /* The ROM comes from the shared parser now: positional or --rom,
@@ -3813,10 +3853,12 @@ int snesrecomp_desktop_main(const SnesDesktopHostGame *game, int argc, char **ar
         (char *)(arg_rom ? arg_rom : (beside_exe[0] ? beside_exe : ""))
       };
       int la_argc = (la_argv[1][0] != '\0') ? 2 : 1;
-      if (!snesrecomp_launcher_resolve_rom_sha256(la_argc, la_argv, rom_path_buf,
-                                                  sizeof(rom_path_buf),
-                                                  g_rom_identity_ok ? g_rom_sha256
-                                                                  : NULL)) {
+      if (!snesrecomp_launcher_resolve_rom_sha256_multi(la_argc, la_argv, rom_path_buf,
+                                                        sizeof(rom_path_buf),
+                                                        g_rom_num_sha256s
+                                                            ? (const uint8_t (*)[32])g_rom_sha256s
+                                                            : NULL,
+                                                        (size_t)g_rom_num_sha256s)) {
         /* User cancelled the picker or repeatedly chose a non-matching ROM. */
         snesrecomp_host_args_usage(program_path, NULL);
         fprintf(stderr, "\nYou must legally own a copy of %s.\n",
@@ -3981,6 +4023,24 @@ int snesrecomp_desktop_main(const SnesDesktopHostGame *game, int argc, char **ar
   }
   host_report_breadcrumb("rom loaded: %u bytes", kRom_SIZE);
   if (game->on_rom_loaded) game->on_rom_loaded(kRom, kRom_SIZE);
+  if (game->patch_rom_ex && kRom) {
+    /* A pack that changes the image's size (a language pack: the base ROM
+     * becomes the image the code was generated from, and that one is larger).
+     * The hook owns the buffer it hands back; the one read here is ours. */
+    char patch_error[256] = {0};
+    uint8 *patched = kRom;
+    size_t patched_size = kRom_SIZE;
+    if (!game->patch_rom_ex(&patched, &patched_size, patch_error, sizeof(patch_error))) {
+      Die(patch_error[0] ? patch_error : "a ROM patch failed to apply");
+      return 1;
+    }
+    if (patched != kRom) {
+      free(kRom);
+      kRom = patched;
+      kRom_SIZE = (uint32)patched_size;
+      host_report_breadcrumb("rom patched: %u bytes", kRom_SIZE);
+    }
+  }
   if (game->patch_rom && kRom) {
     char patch_error[256] = {0};
     if (!game->patch_rom(kRom, kRom_SIZE, patch_error, sizeof(patch_error))) {
