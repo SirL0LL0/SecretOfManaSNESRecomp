@@ -39,14 +39,30 @@ ritratto del personaggio, cursore blu sulla "A", riquadri, testo e sfondo combac
 > Il dump OAM "vuoto" era un terzo falso binario (dump presi sulla schermata sbagliata).
 
 Differenze **reali** che restano (non incidono sulla name-entry):
-- **VRAM**: identica al riferimento tranne word `0x7000-0x7FFF` (byte `0xE000-0xFFFF`): nel recomp è
-  **tutto zero**, nel riferimento ci sono ~5 KB. Zona = metà alta del CHR di BG2 (base `0x6000`).
-- **WRAM**: `$E700-$FFFF` → 6379 byte non-nulli nel riferimento, **1 nel recomp** (buffer del loader);
-  `$4A00-$7FFF` → 18715 byte diversi (stato di gioco/buffer); `$D600+` → **codice 6502 identico**
-  (il decompressore è già copiato in WRAM).
-- Verificato fino a f5010: nel recomp quei dati **non arrivano mai** (non è un ritardo, il loader non gira).
-- ⇒ il riferimento carica un blocco di grafica che il recomp non carica. Candidati: flag di job in WRAM,
-  budget di cicli del frame, o un IRQ/HDMA che nel reference scatta e nel recomp no.
+- **VRAM**: il riferimento scrive ~5 KB in `0xEC80-0xFFFF` (word `0x7640-0x7FFF`, parte alta del CHR di BG2)
+  durante le transizioni (f2600 dopo il primo Start, f3150 dopo il secondo); il **recomp non ci scrive mai**.
+  I dati non sono nel ROM e non compaiono da nessun'altra parte nella memoria del recomp.
+  Verificato fino a f5010: non è un ritardo. **Effetto visivo: nessuno** (la name-entry è 0,00% diversa).
+- **WRAM (mirror valido $0000-$1FFF)**: dove il gioco scrive, i due coincidono, tranne:
+  - `$0110`/`$0112` — vettori nativi BRK/ABORT: rif `14 00 / 02 00`, recomp `13 00 / F8 FF`;
+  - `$02B3` — rif `B8`, recomp `8A`;
+  - `$04C3`/`$04D6`/`$04DE` — differenze di bit (`05/01`, `24/20`, `88/80`);
+  - `$0566-$05A0` — un blocco di codice copiato in WRAM **shiftato di 1 byte** e con contenuto leggermente diverso:
+    ⇒ il "system code" del gioco (handler NMI + decompressore) viene copiato in WRAM **1 byte più in basso** nel recomp.
+  I ~5000 byte "differenti" che sembravano un blocco mancante sono **spazzatura**: Mesen riempie la memoria non
+  inizializzata con rumore, il recomp la mette a zero (5030 dei 6118 byte diversi sono "rif≠0 e recomp=0").
+
+### Strumentazione (errori da non ripetere)
+- `emu.memType.*` sono **costanti**: l'accesso è `emu.read(addr, memType)`, non `memType(addr)`.
+- `emu.getState()` dentro il callback `endFrame` **uccide** il run di Mesen (exit -1, nessun file scritto).
+- `emu.read(addr, snesWorkRam)` è **indirizzato per CPU**: solo `$0000-$1FFF` è il mirror WRAM reale
+  (HiROM); oltre è ROM. I vecchi dump "WRAM 128 KB" erano spazzatura.
+- Il piano dei mod del recomp **non apre** il ROM con `[` `]` nel percorso → usare `sources\rom_test.sfc`
+  (SHA-256 identico a quello originale).
+- Il recomp ha **due** frame driver: default = `snes_beam_frame_driver` (allineato al fascio, disegna dal
+  raster journal), legacy = `snes_generic_frame_driver` (`SOM_FRAME_DRIVER=generic`).
+  **Tutte le misure di questa sessione erano sul driver generic+journal**: con il driver default (beam)
+  le differenze VRAM/WRAM sono **identiche** ⇒ le divergenze sono nel *guest*, non nel driver.
 
 OAM (128 sprite), tilemap BG1 (`0x4800`) e BG2 (`0x5800`), CGRAM e registri PPU: **identici** al riferimento.
 
@@ -85,17 +101,24 @@ Script: `press X N` = N frame di pressione **+ 1 idle**; i tag dei dump possono 
 
 ## 6. Prossimi passi
 
-1. Capire perché il loader dei ~6 KB non gira nel recomp (WRAM `$E700` resta vuoto): tracciare il
-   chiamante del decompressore (`$7E:C18B`, chiamato dalla catena di job nella NMI handler) e i
-   suoi parametri (`$7F:00DB`, `$02D6`, `$02E2`).
-2. Verificare che il blocco mancante serva dopo (campo di gioco) e non sia innocuo.
-3. Lead residuo ~3%: allineamento con riferimento basato su scroll/HDMA, poi budget cicli/stall.
-4. Test Start ripetuti e alle soglie f2100-f2400 (freeze non riprodotto con Start f2500+f3105).
-5. Script di test obsoleti: `prologue*.script` premano Start a f900 (prima della correzione della timeline).
-6. **Default**: invertire `SNESRECOMP_RASTER_JOURNAL` a 1, rimuovere/gateare le diagnostiche, rebuild,
+1. **Il system code copiato 1 byte più in basso** (`$0110`, `$02B3`, `$0566+`): la copia a f11 parte da
+   `interp@$C14CD5` (ROM bank $C1) e scrive `$0000-$147F`; nel riferimento il blocco finisce a un indirizzo
+   diverso. Individuare nel disassembly la routine di copia e da dove prende sorgente/lunghezza/destinatario
+   (i wlog del recomp: `SNESRECOMP_WLOG_ADDR=0000:1FFF:<file>` + `SNESRECOMP_WLOG_STATE=1` danno PC e stato).
+   Se la copia è una *decompressione*, il suo output dipende dai parametri: spiega anche i 5 KB di VRAM mancanti.
+2. I 5 KB di VRAM (`0xEC80-0xFFFF`): trovare chi li scrive (probabile DMA a `$2118/$2119/$2120` con
+   destinazione word `0x7640`). Il log PPU (`.ppuw.tsv`) richiede la build diagnostica
+   (`SOM_ENABLE_DEBUG_COVERAGE=ON`).
+3. Verificare che l'immagine ROM usata dal recomp sia **identica** al ROM puro (i mod sono off per default,
+   ma `som_msu1_patch.c` è compilato dentro): confrontare l'hash dell'immagine in memoria.
+4. Lead residuo ~3%: allineamento con riferimento basato su scroll/HDMA, poi budget cicli/stall.
+5. Test Start ripetuti e alle soglie f2100-f2400 (freeze non riprodotto con Start f2500+f3105).
+6. Script di test obsoleti: `prologue*.script` premano Start a f900 (prima della correzione della timeline).
+7. **Default**: il driver di default è già quello *beam*; valutare se `SNESRECOMP_RASTER_JOURNAL` serve
+   ancora (con il beam driver il journal è interno), rimuovere/gateare le diagnostiche, rebuild,
    ri-eseguire i check coverage/`debug.log` (`bsnes_usage_to_tier2.py`, `auto_extend_coverage.py`),
    sincronizzare la copia esterna dei sorgenti (`SOM\snesrecomp`).
-7. Push su GitHub: `git push origin main` (vedi §7).
+8. Push su GitHub: `git push origin main` (vedi §7).
 
 ## 7. Percorsi chiavi
 
