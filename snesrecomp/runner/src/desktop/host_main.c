@@ -693,6 +693,14 @@ static void FinalizePpuFrame(void) {
       memcpy(dst, src, (size_t)out_w * 4);
       continue;
     }
+    /* A title compositor widened the frame (prepare_frame) around a native
+     * raster: hand it the field unscaled, at the start of each row. Stretching
+     * 256 dots over more columns left every fourth one empty (black). */
+    if (in_w < out_w) {
+      memcpy(dst, src, (size_t)in_w * 4);
+      memset(dst + (size_t)in_w * 4, 0, (size_t)(out_w - in_w) * 4);
+      continue;
+    }
     for (int x = 0; x < out_w; x++) {
       const int x0 = (int)((int64_t)x * in_w / out_w);
       const int x1 = (int)((int64_t)(x + 1) * in_w / out_w);
@@ -1413,8 +1421,11 @@ static void DrawPpuFrameWithPerf(void) {
    * viewport as a 256-pixel frame (g_present_logical_width). Title-owned
    * compositors and the widescreen field keep the 256-wide copy, and so does
    * frame blending, whose kept frame cannot change width between presents. */
+  /* A title compositor that keeps the frame at 256 (its draw_frame declines
+   * it) still gets the native hi-res field. */
   const bool native_hires =
-      g_field_width > g_snes_width && !g_game->draw_frame && !g_ws_active &&
+      g_field_width > g_snes_width && (!g_game->draw_frame || g_snes_width == 256) &&
+      !g_ws_active &&
       !g_game->native_widescreen
 #if defined(SNESRECOMP_HOST_HAS_BLEND)
       && !g_config.frame_blend

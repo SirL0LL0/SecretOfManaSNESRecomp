@@ -1,0 +1,42 @@
+format_version = 1
+id = "som.widescreen"
+version = "1.0.0"
+name = "Secret of Mana Widescreen"
+author = "secret-of-mana-recomp (after Mega Man X's adaptive renderer by mstan)"
+description = "Adaptive widescreen view: the field is extended from the game's own map, so the margins show the real surroundings."
+resolver = "declarative"
+save_compatibility = "shared"
+
+# The Italian translation (Mumble Translation v2.0) this executable verifies.
+[[target]]
+game_id = "secret-of-mana"
+rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
+
+[[feature]]
+id = "widescreen"
+name = "Widescreen"
+description = "Extend the field view to the sides. Menus, Mode 7 and other screens stay 4:3, pillarboxed. Phase 1: backgrounds only; characters and enemies still appear within the original 256 pixels."
+group = "Display"
+presentation_only = true
+default_enabled = false
+
+[[option]]
+feature = "widescreen"
+id = "aspect"
+label = "View aspect ratio"
+description = "Fit the view to the window, or select a fixed ratio. Settings > Display Aspect controls the pixel shape in every mode."
+type = "choice"
+default = "adaptive"
+[[option.choice]]
+value = "adaptive"
+label = "Adaptive"
+[[option.choice]]
+value = "16:9"
+label = "16:9"
+[[option.choice]]
+value = "21:9"
+label = "21:9"
+
+[[plugin]]
+feature = "widescreen"
+id = "som.widescreen"

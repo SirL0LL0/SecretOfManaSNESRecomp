@@ -56,7 +56,8 @@ set(SOM_DESKTOP_RUNNER_SOURCES ${SOM_COMMON_RUNNER_SOURCES}
   "${SNESRECOMP_RUNNER_ROOT}/src/snes_savestate_menu.c"
   "${SNESRECOMP_RUNNER_ROOT}/src/snes_osd.c"
   "${SNESRECOMP_RUNNER_ROOT}/src/host_report.c")
-add_executable(som_recomp ${SOM_DESKTOP_RUNNER_SOURCES} ${GENERATED_SOURCES} ${SOM_SOURCES} src/som_main.c)
+add_executable(som_recomp ${SOM_DESKTOP_RUNNER_SOURCES} ${GENERATED_SOURCES} ${SOM_SOURCES} src/som_main.c
+  src/som_widescreen.c)
 target_include_directories(som_recomp PRIVATE config generated "${SNESRECOMP_RUNNER_ROOT}/src" "${SNESRECOMP_RUNNER_ROOT}/src/snes")
 foreach(_target som_headless som_recomp)
   if(MSVC)

@@ -49,6 +49,14 @@ Gold, Max Money and the Mana Sword write the game block at $7ECC40, and orbs and
 
 **Mods → Translation → Italian translation fixes** (on by default) corrects bytes of the translated event script in memory. So far it fixes one byte. On the waterfall bridge in the prologue, Timothy's "Dev'essere una specie di tesoro!" was printed outside the text box and then in a borderless box. The translation ended the previous two-line box with `28 00 51`, which closes the box, instead of `28 00 52`, which clears it and continues. With the fix the scene matches the US release, checked in Mesen. A scan of the script for the same pattern found no other case.
 
+## Widescreen (phase 1)
+
+**Mods → Display → Widescreen** (off by default) widens the field view. The **View aspect ratio** option sets the shape: **Adaptive** follows the window, or **16:9** or **21:9**. **Settings → Display Aspect** still decides the pixel shape. The design follows Mega Man X's adaptive renderer (github.com/mstan/megamanxsnesrecomp). The PPU keeps rasterising the authentic 256 pixels, and a compositor owned by the title (`src/som_widescreen.c`) draws the margins from the game's own data.
+
+The PPU's own widescreen cannot do this for SoM. The game keeps a 64x32-tile ring per layer in VRAM but refreshes only the band next to the screen, so the columns past the edge are stale. The whole area is in WRAM instead: BG1's map is at $7F:0000 with its metatile table at $7F:C000, and BG2's map is at $7F:4000 with its table at $7F:C800 (each map is 128x128 metatiles). Each frame, the compositor reads the visible metatiles back from VRAM and locates them in the map. When at least 90% agree, it draws BG1 and BG2 into the margins with mode 1's priorities and the frame's colour math and brightness. Otherwise the scene is pillarboxed: the title, Mode 7, and maps being loaded. Mode 5/6 menus keep their native 512-dot field, centred in the same view. It costs about 0.7 ms per frame at 21:9.
+
+Phase 1 covers backgrounds only. Characters, enemies, BG3 and the HUD stay inside the original 256 pixels, and objects drawn as sprites (such as the log on the waterfall bridge) are not extended yet.
+
 ## Save states and fast-forward
 
 A save state now also holds the recompiled CPU's execution state: registers, stack pointer, the interpreter bridge's resume point, and the frame driver's resume PC. Before, a load restored the console's memory but resumed the CPU where the current session was. Loading into the same main loop worked; a state saved in a dialogue froze, and one loaded from the name-entry screen drew garbage. States written before this change still load the old way, so re-save them.

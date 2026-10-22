@@ -34,6 +34,7 @@
 #include "sha256.h"
 #include "som_frame_driver.h"
 #include "som_cheats.h"
+#include "som_widescreen.h"
 #include "som_msu1_patch.h"
 #include "som_music.h"
 #include "som_spc_player.h"
@@ -198,6 +199,7 @@ int main(int argc, char **argv) {
     SomConfigureCoverageDirectory();
     SomMsu1PatchRegister();                   /* Mods → Music → MSU-1 Music */
     SomCheatsRegister();                      /* Mods → Cheats → Cheats */
+    SomWidescreenRegister();                  /* Mods → Display → Widescreen */
     SnesDesktopHostGame game = {0};
 
     /* ── Identity ─────────────────────────────────────────────────────── */
@@ -237,14 +239,16 @@ int main(int argc, char **argv) {
     game.before_run_frame = NULL;
     game.after_run_frame = NULL;
     game.keep_pacing_debt = NULL;
-    game.prepare_frame = NULL;
+    /* Widescreen mod (som_widescreen.c): inert, a plain 256 field, while the
+     * mod is off. */
+    game.prepare_frame = SomWidescreenPrepareFrame;
     game.begin_sim_frame = NULL;
-    game.end_sim_frame = NULL;
-    game.draw_frame = NULL;
+    game.end_sim_frame = SomWidescreenEndFrame;
+    game.draw_frame = SomWidescreenDrawFrame;
     game.presentation_hz = NULL;
-    game.window_base_width = NULL;
+    game.window_base_width = SomWidescreenWindowWidth;
     game.window_base_height = NULL;
-    game.compute_viewport = NULL;
+    game.compute_viewport = SomWidescreenViewport;
     game.aspect_labels = NULL;
     game.num_aspect_labels = 0;
     game.aspect_setting_label = NULL;
