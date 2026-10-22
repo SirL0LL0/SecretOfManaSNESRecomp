@@ -97,12 +97,15 @@ Script: `press X N` = N frame di pressione **+ 1 idle**; i tag dei dump possono 
    sincronizzare la copia esterna dei sorgenti (`SOM\snesrecomp`).
 7. Push su GitHub: `git push origin main` (vedi §7).
 
-## 7. Percorsi chiave
+## 7. Percorsi chiavi
 
 - Driver: `secret-of-mana-recomp/snesrecomp/runner/src/generic_frame_driver.c`
 - PPU/journal: `secret-of-mana-recomp/snesrecomp/runner/src/snes/ppu.c`, `ppu.h`
 - Presentazione (larghezza 256 vs 512): `secret-of-mana-recomp/snesrecomp/runner/src/desktop/host_main.c` (~L1409)
 - Build: `secret-of-mana-recomp/build/som_recomp.exe` · Script: `secret-of-mana-recomp/build/*.script`
+- Patch riproducibile verso il framework pinnato: `secret-of-mana-recomp/patches/snesrecomp-som-intro-timing.patch`
+  (unico patch: IRQ task-switch + fallback renderer mode 5 + output logico mode 5 + raster journal;
+  SHA-256 in `dependencies.lock.json`, applicato da `build.ps1`/`build.sh` sul checkout gemello `../snesrecomp`)
 - Dump recomp: `secret-of-mana-recomp/work/tree/**` · Riferimento Mesen: `SOM/work/mesen/tree/**`
 - Riferimento name-entry: `SOM/work/mesen/tree/ref_name_{oam,vram,cgram}.bin`, `ref_name_layers_3410.txt`, `ref_name_3410.png`
 - Riferimento doppio Start: `SOM/work/mesen/tree/start_ref2/ref_{2800,3100,3400,3700}.png`
