@@ -3,7 +3,7 @@ id = "som.language"
 version = "1.0.0"
 name = "Language"
 author = "Mumble Translation (v2.0), packaged for this recompilation"
-description = "Plays the game in Italian starting from the original English release: the ROM is patched in memory into the image this build was made from. The ROM file on disk is never modified."
+description = "Plays the game in Italian: the player supplies the translation patch, it is applied to the ROM in memory, and the ROM file on disk is never modified."
 resolver = "declarative"
 
 # The original English (US) release the patch applies to.
@@ -19,16 +19,16 @@ rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
 
 [[feature]]
 id = "italian"
-name = "Italiano (dal ROM inglese)"
+name = "Italiano"
 group = "Language"
-description = "Turns the original English ROM into the Italian one in memory, before the game starts. The result is checked against the image this executable was generated from, so a wrong patch refuses to run. Takes effect on the next launch."
-default_enabled = true
+description = "Applies the Mumble Translation patch to the English ROM, in memory, before the game starts. Choose the patch file on this row (it comes from the official archive at mumble.romhacking.it/som.html and is not distributed here). The result is checked against the image this executable was generated from, so a wrong patch refuses to run. Takes effect on the next launch."
+default_enabled = false
 
-# The patch itself. It rewrites the English release into the Italian one: the
-# text, the script and the graphics move, and the translation adds a megabyte
-# of banks. The reader grows the image for the banks it adds.
-[[patch]]
+# The translation patch is not distributed: the player brings it.
+[[resource]]
 feature = "italian"
-id = "t-it-v2"
-file = "secret-of-mana-italian-t-it-v2.ips"
-target_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
+id = "patch"
+label = "Translation patch (IPS)"
+description = "The Mumble Translation patch for Secret of Mana (USA), from the official archive (mumble.romhacking.it/som.html), applied to the original English ROM."
+format = "file"
+required = true

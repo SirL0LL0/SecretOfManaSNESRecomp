@@ -149,46 +149,10 @@ static int SomApplyFanfares(uint8_t *rom, size_t size, char *error, size_t error
     return 1;
 }
 
-/* Mods → Translation → Italian translation fixes (som.translation-fixes, on
- * by default): event-script bytes the translation got wrong. Each entry
- * names the byte the translation has, and is skipped if the image holds
- * anything else.
- *
- * In the script a text block ends with 28 00 xx: wait for a key, then 7F (new
- * line; a full three-line box turns the page), 52 (clear the box and go on)
- * or 51 (close the box). The translation split Elliott's "But I heard
- * Grandma..." over two boxes, the second only two lines long, and ended it
- * with 51 -- so Timothy's next line was printed with the box closed: outside
- * it on the right, then in a borderless box. 52 is what it needs; the scene
- * then matches the US release. Checked against Mesen. */
-typedef struct SomScriptFix { uint32_t offset; uint8_t from, to; } SomScriptFix;
-static const SomScriptFix kSomTranslationFixes[] = {
-    {0x0927F2, 0x51, 0x52},   /* C9:27F2 bridge, before "TIMOTHY: Dev'essere una" */
-};
-
-static void SomApplyTranslationFixes(uint8_t *rom, size_t size) {
-#if SNESRECOMP_ENABLE_MODS
-    if (!snes_mod_runtime_feature_enabled_c("som.translation-fixes", "fixes")) return;
-    unsigned applied = 0;
-    for (size_t i = 0; i < sizeof(kSomTranslationFixes) / sizeof(kSomTranslationFixes[0]); ++i) {
-        const SomScriptFix *fix = &kSomTranslationFixes[i];
-        if (fix->offset < size && rom[fix->offset] == fix->from) {
-            rom[fix->offset] = fix->to;
-            ++applied;
-        }
-    }
-    fprintf(stderr, "som: Italian translation fixes applied in memory (%u)\n", applied);
-#else
-    (void)rom; (void)size;
-#endif
-}
-
 /* The mods that act before SnesInit: the fanfares IPS (checked against its
- * digest, so first), the translation fixes, the ROM-data cheats, and the
- * MSU-1 pack. */
+ * digest, so first), the ROM-data cheats, and the MSU-1 pack. */
 static int SomPrepareRom(uint8_t *rom, size_t size, char *error, size_t error_cap) {
     if (!SomApplyFanfares(rom, size, error, error_cap)) return 0;
-    SomApplyTranslationFixes(rom, size);
     return
            SomCheatsPatchRom(rom, size, error, error_cap) &&
            SomMsu1PatchPrepare(error, error_cap);
@@ -196,12 +160,11 @@ static int SomPrepareRom(uint8_t *rom, size_t size, char *error, size_t error_ca
 
 /* ── The language pack ────────────────────────────────────────────────────
  *
- * Mods -> Language -> Italiano. The player picks the original English (US)
- * ROM; the pack turns it into the image this executable was generated from
- * (the Mumble Translation v2.0 ROM), in memory, and only if the result
- * hashes as that image. The file on disk is never touched. A player who
- * already has the translated ROM hands that one over and the pack has
- * nothing to do.
+ * Mods -> Language -> Italiano. The player brings the translation patch (it
+ * is not distributed here) and the original English ROM; the pack applies
+ * the patch in memory, before SnesInit, and only if the result hashes as the
+ * image this executable was generated from (the Mumble Translation v2.0 ROM).
+ * The file on disk is never touched.
  *
  * The translation is 99.9% data: of the 124545 bytes it changes in the
  * 2 MB it shares with the US release, 117 fall inside recompiled code, and
@@ -217,7 +180,7 @@ static int SomPrepareRom(uint8_t *rom, size_t size, char *error, size_t error_ca
  * release is a different game and would need its own build. */
 #define SOM_LANGUAGE_PACKAGE "som.language"
 #define SOM_LANGUAGE_FEATURE "italian"
-#define SOM_LANGUAGE_IPS     "secret-of-mana-italian-t-it-v2.ips"
+#define SOM_LANGUAGE_RESOURCE "patch"
 
 /* The image the code was generated from: the Italian translation. The
  * patched base ROM has to hash to this, or the launch is refused. */
@@ -243,10 +206,14 @@ static int SomApplyLanguagePack(uint8_t **rom, size_t *size, char *error,
         fprintf(stderr, "som: the ROM is already the Italian one\n");
         return 1;
     }
-    char root[1024], path[1200];
-    if (!snes_mod_runtime_package_root_c(SOM_LANGUAGE_PACKAGE, NULL, root, sizeof(root)) ||
-        snprintf(path, sizeof(path), "%s/%s", root, SOM_LANGUAGE_IPS) >= (int)sizeof(path)) {
-        snprintf(error, error_cap, "Language: package folder not found");
+    /* The patch comes from the player: the Mods page has the file chooser
+     * for it, and the path it holds is the one to apply. */
+    char path[1200];
+    if (!snes_mod_runtime_resource_path_c(SOM_LANGUAGE_PACKAGE, SOM_LANGUAGE_FEATURE,
+                                          SOM_LANGUAGE_RESOURCE, path, sizeof(path)) ||
+        !path[0]) {
+        snprintf(error, error_cap,
+                 "Language: choose the translation patch on the Mods page");
         return 0;
     }
     FILE *f = fopen(path, "rb");

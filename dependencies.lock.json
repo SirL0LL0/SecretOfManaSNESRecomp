@@ -21,7 +21,7 @@
   },
   "framework_patch": {
     "file": "patches/snesrecomp-som-intro-timing.patch",
-    "sha256": "96700d7944b1392931fe1a0f796be035a4427dd820487256e62d0d7947e03464",
+    "sha256": "55c7962bda161697f4bb3205abe320e3510a4c261b550be4df0674273dd9a719",
     "applies_to": "dependencies.snesrecomp.revision",
     "contains": [
       "som-irq-task-switch",

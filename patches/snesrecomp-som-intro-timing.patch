@@ -1703,6 +1703,35 @@ index 5b2b871..5d4b8bd 100644
  int snes_mod_runtime_commit_c(const char* rom_path);
  void snes_mod_runtime_activate_plugins_c(void);
  const struct RecompLauncherCModProvider*
+diff --git a/runner/src/rom_patch.c b/runner/src/rom_patch.c
+index 50131ba..4db52da 100644
+--- a/runner/src/rom_patch.c
++++ b/runner/src/rom_patch.c
+@@ -74,6 +74,24 @@ static RomPatchStatus apply_ips(const uint8_t *source, size_t source_size,
+         }
+         uint32_t offset = be24(patch + at);
+         at += 3;
++        if (offset == 0xffffffu) {
++            /* The classic IPS end marker: the three bytes that follow are the
++             * size the output is truncated or extended to. A patch that only
++             * rewrites bytes carries no size, and the image keeps the
++             * source's. */
++            if (patch_size - at >= 3) {
++                uint32_t extend = be24(patch + at);
++                at += 3;
++                if (extend > img->size) {
++                    if (!image_reserve(img, extend)) return kRomPatch_NoMemory;
++                    memset(img->data + img->size, 0, extend - img->size);
++                    img->size = extend;
++                } else if (extend < img->size) {
++                    img->size = extend;
++                }
++            }
++            break;
++        }
+         if (patch_size - at < 2) return kRomPatch_Invalid;
+         uint32_t size = be16(patch + at);
+         at += 2;
 diff --git a/runner/src/snes/dma.c b/runner/src/snes/dma.c
 index f571b01..4df46e4 100644
 --- a/runner/src/snes/dma.c

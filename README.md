@@ -44,13 +44,13 @@ The host clock catches up after short hitches (up to four frames, the size of th
 
 ## Mods
 
-**Mods → Language → Italiano (dal ROM inglese)** (on by default) lets the game run from the original
-English (US) release: the launcher takes either the English ROM or the already-translated one, and
-the package in `mods/preloaded/packages/som.language/` turns the English release into the Italian
-image in memory, before `SnesInit`. The ROM file on disk is never modified. The patch is a
-byte-level IPS (160 KB, 5% of the image) and the result is checked against the SHA-256 of the image
-this executable was generated from, so a wrong patch refuses the launch instead of running
-half-translated.
+**Mods → Language → Italiano** (off by default) lets the game run in Italian starting from the original
+English (US) release. **The patch is not distributed here**: the player downloads it from the official
+archive (mumble.romhacking.it/som.html) and picks the file on the Mods page. The launcher takes either
+the English ROM or the already-translated one; the package in `mods/preloaded/packages/som.language/`
+applies the chosen patch in memory, before `SnesInit`, and checks the result against the SHA-256 of
+the image this executable was generated from, so a wrong patch refuses the launch instead of running
+half-translated. The ROM file on disk is never modified.
 
 Why this works in a recompilation: the translation moves the text, the script and the graphics, and
 with them the *pointers* the code holds to them. Of the 124545 bytes the translation changes, 117
@@ -60,9 +60,11 @@ translation's: the patched image is exactly the one the code expects, and the re
 to running with the translated ROM (verified: the framebuffer, VRAM, WRAM, OAM, CGRAM and the
 registers all match).
 
-English → Italian is the whole scope: the code in this executable is the translation's, so the English
-release is the base the patch starts from, not a language the player picks. A Japanese or otherwise
-different release is a different game and would need its own build.
+The English release is the base the patch starts from, not a language the player picks: the code in
+this executable is the translation's, and a translation that puts the text somewhere else changes the
+addresses inside the recompiled code. An English default therefore means generating the code from the
+English ROM, and then the Italian option needs either its own module or the text addresses read from
+the image.
 
 **Mods → Music → Restore Unused Fanfares** (off by default) plays the two unused fanfares, for the Sea Hare's Tail and the Moogle Belt. It is Kethinov's patch, version 1.2, with its three records moved to where the Italian translation keeps them. The package is in `mods/preloaded/packages/som.restore-unused-fanfares/`. When the mod is enabled, `src/som_main.c` applies its IPS to the in-memory image before `SnesInit` and checks the result against the SHA-256 in the manifest. The ROM file on disk is never modified. The change takes effect at the next launch.
 
