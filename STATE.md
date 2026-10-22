@@ -66,14 +66,28 @@ Differenze **reali** che restano (non incidono sulla name-entry):
 
 OAM (128 sprite), tilemap BG1 (`0x4800`) e BG2 (`0x5800`), CGRAM e registri PPU: **identici** al riferimento.
 
-## 4. Lead residuo ~3% (ancora aperto)
+## 4. Lead residuo: **non esiste** (misurato 2026-10-22)
 
-Il riferimento mostra i primi pixel verdi dell'albero a f2070, il recomp a f1999 (~71 frame).
-Non è l'IRQ duplicato (journal mode ≡ isolate2). Candidati rimasti: budget cicli/frame del guest,
-stall accounting DMA/HDMA, o il costo dei polling in vblank.
-Nota: il diff pixel-per-pixel sull'albero/file-select dà 33-40 % di differenze **anche a pochi frame
-di scarto**, perché lo sfondo è una texture a piastrelle: serve un riferimento di allineamento
-(scroll BG1/HDMA), non un diff grezzo.
+Con il driver **di default** (beam) le due timeline combaciano *esattamente*:
+
+| evento | riferimento (Mesen) | recomp |
+|---|---|---|
+| l'albero compare (scroll 63) | f2075 | f2075 |
+| scroll 62 / 59 / 56 / 53 / 50 | f2400 / 2425 / 2450 / 2475 / 2500 | **stessi frame** |
+| dopo il primo Start (mode 5) | scroll 5 a f2625, 12 a f2650, … | scroll 6 a f2630, 13 a f2655, … ⇒ **~1-2 frame indietro** |
+
+⇒ il vecchio "3% di anticipo / 71 frame" era un artefatto: misurato sul driver *generic*+journal
+e/o con una soglia sui pixel. **Oggi il recomp è sincrono col riferimento** (name-entry 0,00% diverso).
+
+Resta solo da capire il **ritardo di 1-2 frame** dopo il primo Start (irrilevante per la resa).
+
+## 4b. Caveat d'ambiente (NON sono bug del progetto)
+
+Il sandbox interrompe in modo **intermittente** l'apertura dei file da parte dei processi lanciati:
+- il recomp fallisce con `mods: plan rejected: cannot open <rom>` (il piano dei mod legge il ROM per lo SHA-256);
+- Mesen muore subito con exit -1 e output vuoto.
+Workaround: copiare il ROM in `C:\Users\lollo\AppData\Local\Temp\opencode` e riprovare; spesso il tentativo
+successivo va a buon fine. Le cartelle `sources/` sono intatte (i file ci sono).
 
 ## 5. Comandi
 
@@ -101,17 +115,16 @@ Script: `press X N` = N frame di pressione **+ 1 idle**; i tag dei dump possono 
 
 ## 6. Prossimi passi
 
-1. **Il system code copiato 1 byte più in basso** (`$0110`, `$02B3`, `$0566+`): la copia a f11 parte da
-   `interp@$C14CD5` (ROM bank $C1) e scrive `$0000-$147F`; nel riferimento il blocco finisce a un indirizzo
-   diverso. Individuare nel disassembly la routine di copia e da dove prende sorgente/lunghezza/destinatario
-   (i wlog del recomp: `SNESRECOMP_WLOG_ADDR=0000:1FFF:<file>` + `SNESRECOMP_WLOG_STATE=1` danno PC e stato).
-   Se la copia è una *decompressione*, il suo output dipende dai parametri: spiega anche i 5 KB di VRAM mancanti.
-2. I 5 KB di VRAM (`0xEC80-0xFFFF`): trovare chi li scrive (probabile DMA a `$2118/$2119/$2120` con
-   destinazione word `0x7640`). Il log PPU (`.ppuw.tsv`) richiede la build diagnostica
-   (`SOM_ENABLE_DEBUG_COVERAGE=ON`).
+1. **Ritardo di 1-2 frame dopo il primo Start**: piccolo, ma da spiegare (budget cicli del frame? costo
+   dei polling in vblank?). La chiave di allineamento è lo scroll BG1 (le due timeline coincidono
+   esattamente fino a f2550).
+2. Le differenze residue di variabili (`$00F4`, `$02B1`, `$04C3`, `$04D6`, `$04DE`) sono **piccole
+   differenze di contatori/indici**: coerenti con il ritardo di 1-2 frame, non con un bug.
 3. Verificare che l'immagine ROM usata dal recomp sia **identica** al ROM puro (i mod sono off per default,
    ma `som_msu1_patch.c` è compilato dentro): confrontare l'hash dell'immagine in memoria.
-4. Lead residuo ~3%: allineamento con riferimento basato su scroll/HDMA, poi budget cicli/stall.
+4. I 5 KB "mancanti" in VRAM `0xEC80-0xFFFF` sono **spazzatura non inizializzata di Mesen** (il gioco li
+   azzera in entrambi; nel recomp erano già zero). Nessun upload manca: confermato dal log PPU
+   (nessuna scrittura a `$2118/$2119/$2120` in quelle frame).
 5. Test Start ripetuti e alle soglie f2100-f2400 (freeze non riprodotto con Start f2500+f3105).
 6. Script di test obsoleti: `prologue*.script` premano Start a f900 (prima della correzione della timeline).
 7. **Default**: il driver di default è già quello *beam*; valutare se `SNESRECOMP_RASTER_JOURNAL` serve
