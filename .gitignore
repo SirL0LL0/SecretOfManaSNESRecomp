@@ -12,6 +12,25 @@ work/
 /last_run_report.json
 /opening_text.*
 /step_*
+
 # Its own repository (github.com/mstan/recomp-ui)
 snesrecomp/recomp-ui/
 
+# Build/tool leftovers
+.vs/
+*.user
+*.suo
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.dll
+*.log
+CMakeUserPresets.json
+compile_commands.json
+
+# Game data must never enter the repository
+*.sfc
+*.smc
+*.fig
+*.sfc.*

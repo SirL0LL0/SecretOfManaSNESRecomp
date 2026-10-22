@@ -2926,6 +2926,26 @@ static bool ppu_evaluateSprites(Ppu* ppu, int line) {
       int usedTile = ((((oam1 & 0xff) >> 4) + (row >> 3)) << 4) |
                      (((oam1 & 0xf) + (usedCol >> 3)) & 0xf);
             const uint16 *addr = &PpuRenderVram(ppu)[(objAdr + usedTile * 16 + (row & 0x7)) & 0x7fff];
+            /* Env-gated sprite trace: what the OAM entry resolved to and which
+             * VRAM words the tile actually came from. */
+            {
+                static int s_spr_trace = -2;
+                if (s_spr_trace == -2) {
+                    const char *e = getenv("SNESRECOMP_TRACE_SPR");
+                    s_spr_trace = (e && *e) ? atoi(e) : 0;
+                }
+                if (s_spr_trace && (int)snes_frame_counter == s_spr_trace) {
+                    fprintf(stderr,
+                            "[spr] f=%d line=%d idx=%d x=%d y=%d size=%d oam1=%04X "
+                            "objAdr=0x%04X usedTile=%d tileWord=0x%04X words=",
+                            (int)snes_frame_counter, line, index, x, sprite_y,
+                            spriteSize, (unsigned)oam1, (unsigned)objAdr, usedTile,
+                            (unsigned)((objAdr + usedTile * 16) & 0x7fff));
+                    for (int wi = 0; wi < 16; wi++)
+                        fprintf(stderr, "%04X ", addr[wi]);
+                    fprintf(stderr, "\n");
+                }
+            }
             uint32 plane = addr[0] | addr[8] << 16;
             int px_left = IntMax(-(col + x + kPpuExtraLeftRight), 0);
             int px_right = IntMin(256 + kPpuExtraLeftRight - (col + x), 8);
