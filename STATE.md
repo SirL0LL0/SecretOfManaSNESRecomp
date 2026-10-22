@@ -118,12 +118,10 @@ Script: `press X N` = N frame di pressione **+ 1 idle**; i tag dei dump possono 
 0. **Lingue** (2026-10-23, fatto per l'italiano): il launcher accetta il ROM **originale americano**;
    il pacchetto `som.language` lo trasforma in memoria nell'immagine da cui è stato generato il codice
    (IPS 160 KB, 5% dell'immagine; verificato: framebuffer/VRAM/WRAM/OAM/CGRAM/registri **identici** al
-   run con il ROM italiano). Restano:
-   - **ROM giapponese**: la traduzione italiana è basata sulla release **americana**; il JP differisce
-     del 92,8% ⇒ non è una patch byte-level ma un'altra build (disassembly diverso → ricompilazione).
-   - **altre lingue** (ES/PT/DE/FR/CN/KR…): il meccanismo è pronto (un IPS per lingua), ma ogni
-     traduzione *sposta il testo* ⇒ i puntatori al testo stanno nel codice ricompilato ⇒ serve una
-     build per lingua (la `config/` si riusa: le funzioni sono agli stessi indirizzi).
+   run con il ROM italiano). **Scope: solo inglese → italiano** (decisione dell'utente): il codice
+   eseguibile è quello della traduzione, quindi la release inglese è la base da cui parte la patch,
+   non una lingua che il giocatore sceglie. Il ROM giapponese (differisce del 92,8% ⇒ altro gioco)
+   e le altre lingue restano fuori scope.
 1. **Ritardo di 1-2 frame dopo il primo Start**: piccolo, ma da spiegare (budget cicli del frame? costo
    dei polling in vblank?). La chiave di allineamento è lo scroll BG1 (le due timeline coincidono
    esattamente fino a f2550).

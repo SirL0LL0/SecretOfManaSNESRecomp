@@ -196,10 +196,12 @@ static int SomPrepareRom(uint8_t *rom, size_t size, char *error, size_t error_ca
 
 /* ── The language pack ────────────────────────────────────────────────────
  *
- * Mods -> Language -> Italiano. The player picks the original US ROM; the
- * pack turns it into the image this executable was generated from (the
- * Mumble Translation v2.0 ROM), in memory, and only if the result hashes as
- * that image. The file on disk is never touched.
+ * Mods -> Language -> Italiano. The player picks the original English (US)
+ * ROM; the pack turns it into the image this executable was generated from
+ * (the Mumble Translation v2.0 ROM), in memory, and only if the result
+ * hashes as that image. The file on disk is never touched. A player who
+ * already has the translated ROM hands that one over and the pack has
+ * nothing to do.
  *
  * The translation is 99.9% data: of the 124545 bytes it changes in the
  * 2 MB it shares with the US release, 117 fall inside recompiled code, and
@@ -209,9 +211,10 @@ static int SomPrepareRom(uint8_t *rom, size_t size, char *error, size_t error_ca
  * expects -- which is why the check below can be exact: the patched image
  * must hash to the identity the code was built from.
  *
- * A second language would need the same treatment, and the same code: a
- * translation that moves the text elsewhere changes the pointers inside the
- * recompiled code, so it needs its own build of the generated code. */
+ * English -> Italian is the whole scope: the code in this executable is the
+ * translation's, so the English release is the base the patch starts from,
+ * not a language the player can pick. A Japanese or otherwise different
+ * release is a different game and would need its own build. */
 #define SOM_LANGUAGE_PACKAGE "som.language"
 #define SOM_LANGUAGE_FEATURE "italian"
 #define SOM_LANGUAGE_IPS     "secret-of-mana-italian-t-it-v2.ips"
@@ -228,13 +231,6 @@ static const char kSomUsRomSha256[] =
 static int SomApplyLanguagePack(uint8_t **rom, size_t *size, char *error,
                                  size_t error_cap) {
 #if SNESRECOMP_ENABLE_MODS
-    /* One language at a time: the features are toggles, so two of them on
-     * would mean two patches on one image. */
-    if (snes_mod_runtime_feature_enabled_c(SOM_LANGUAGE_PACKAGE, "english"))
-        if (snes_mod_runtime_feature_enabled_c(SOM_LANGUAGE_PACKAGE, SOM_LANGUAGE_FEATURE)) {
-            snprintf(error, error_cap, "Language: pick one language");
-            return 0;
-        }
     if (!snes_mod_runtime_feature_enabled_c(SOM_LANGUAGE_PACKAGE, SOM_LANGUAGE_FEATURE))
         return 1;
     /* The player may already own the translated ROM: then the patch has
