@@ -21,23 +21,31 @@ PATCH_EXPECTED=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], 
 PATCH_ACTUAL=$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$PATCH_FILE")
 [ "$PATCH_ACTUAL" = "$PATCH_EXPECTED" ] || { echo "Framework patch SHA-256 mismatch: $PATCH_FILE" >&2; exit 1; }
 FRAME_DRIVER="$SNESRECOMP_ROOT/runner/src/generic_frame_driver.c"
-if ! grep -q 'interp_bridge_last_interrupt_return_pc' "$FRAME_DRIVER"; then
+PPU_SOURCE="$SNESRECOMP_ROOT/runner/src/snes/ppu.c"
+HOST_SOURCE="$SNESRECOMP_ROOT/runner/src/desktop/host_main.c"
+# The single patch carries every Secret of Mana framework change: the IRQ
+# task-switch fix, the Mode 5 renderer fallback, the Mode 5 logical output and
+# the intro raster journal. All four markers are checked after it is applied.
+missing=0
+for marker in "interp_bridge_last_interrupt_return_pc:$FRAME_DRIVER" \
+               "new_renderer_supports_mode:$PPU_SOURCE" \
+               "g_ppu_render_width:$HOST_SOURCE" \
+               "ppu_rasterApplyLine:$FRAME_DRIVER"; do
+  pattern=${marker%%:*}; file=${marker#*:}
+  grep -q "$pattern" "$file" || missing=1
+done
+if [ "$missing" -ne 0 ]; then
   git -C "$SNESRECOMP_ROOT" apply --check "$PATCH_FILE"
   git -C "$SNESRECOMP_ROOT" apply "$PATCH_FILE"
 fi
-grep -q 'interp_bridge_last_interrupt_return_pc' "$FRAME_DRIVER" || { echo 'SNESRecomp IRQ patch is not active' >&2; exit 1; }
+for marker in "interp_bridge_last_interrupt_return_pc:$FRAME_DRIVER" \
+               "new_renderer_supports_mode:$PPU_SOURCE" \
+               "g_ppu_render_width:$HOST_SOURCE" \
+               "ppu_rasterApplyLine:$FRAME_DRIVER"; do
+  pattern=${marker%%:*}; file=${marker#*:}
+  grep -q "$pattern" "$file" || { echo "Secret of Mana framework patch is not active ($pattern)" >&2; exit 1; }
+done
 echo "SNESRecomp patch $PATCH_ACTUAL verified and active"
-RENDERER_PATCH="$ROOT/$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8-sig"))["renderer_patch"]["file"])' "$LOCK")"
-RENDERER_PATCH_EXPECTED=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8-sig"))["renderer_patch"]["sha256"])' "$LOCK")
-RENDERER_PATCH_ACTUAL=$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$RENDERER_PATCH")
-[ "$RENDERER_PATCH_ACTUAL" = "$RENDERER_PATCH_EXPECTED" ] || { echo "Renderer patch SHA-256 mismatch: $RENDERER_PATCH" >&2; exit 1; }
-PPU_SOURCE="$SNESRECOMP_ROOT/runner/src/snes/ppu.c"
-if ! grep -q 'new_renderer_supports_mode' "$PPU_SOURCE"; then
-  git -C "$SNESRECOMP_ROOT" apply --check "$RENDERER_PATCH"
-  git -C "$SNESRECOMP_ROOT" apply "$RENDERER_PATCH"
-fi
-grep -q 'new_renderer_supports_mode' "$PPU_SOURCE" || { echo 'SNESRecomp mode 5 renderer fallback is not active' >&2; exit 1; }
-echo "SNESRecomp renderer patch $RENDERER_PATCH_ACTUAL verified and active"
 cmake -S "$ROOT" -B "$ROOT/build" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DSNESRECOMP_ROOT=$SNESRECOMP_ROOT" "-DRECOMP_UI_ROOT=$RECOMP_UI_ROOT"
 cmake --build "$ROOT/build" --config Release --parallel
 printf 'Built %s and %s\n' "$ROOT/build/som_recomp" "$ROOT/build/som_headless"

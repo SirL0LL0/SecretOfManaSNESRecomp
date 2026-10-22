@@ -34,43 +34,31 @@ $PatchSha = (Get-FileHash -LiteralPath $Patch -Algorithm SHA256).Hash.ToLowerInv
 if ($PatchSha -ne $Lock.framework_patch.sha256) { throw "Framework patch SHA-256 mismatch: expected $($Lock.framework_patch.sha256), found $PatchSha" }
 $FrameDriver = Join-Path $Snes 'runner\src\generic_frame_driver.c'
 $FrameSource = Get-Content -LiteralPath $FrameDriver -Raw
-if ($FrameSource -notmatch 'interp_bridge_last_interrupt_return_pc') {
+$PpuSourcePath = Join-Path $Snes 'runner\src\snes\ppu.c'
+$PpuSource = Get-Content -LiteralPath $PpuSourcePath -Raw
+$HostSourcePath = Join-Path $Snes 'runner\src\desktop\host_main.c'
+$HostSource = Get-Content -LiteralPath $HostSourcePath -Raw
+# The single patch carries every Secret of Mana framework change: the IRQ
+# task-switch fix, the Mode 5 renderer fallback, the Mode 5 logical output and
+# the intro raster journal. All four markers are checked after it is applied.
+$Markers = @(
+  @{ Path = $FrameDriver; Pattern = 'interp_bridge_last_interrupt_return_pc'; Name = 'IRQ task-switch' },
+  @{ Path = $PpuSourcePath; Pattern = 'new_renderer_supports_mode'; Name = 'Mode 5 renderer fallback' },
+  @{ Path = $HostSourcePath; Pattern = 'g_ppu_render_width'; Name = 'Mode 5 logical output' },
+  @{ Path = $FrameDriver; Pattern = 'ppu_rasterApplyLine'; Name = 'intro raster journal' }
+)
+$Missing = @($Markers | Where-Object { (Get-Content -LiteralPath $_.Path -Raw) -notmatch $_.Pattern })
+if ($Missing.Count -gt 0) {
   & git -C $Snes apply --check $Patch
   if ($LASTEXITCODE -ne 0) { throw 'Framework patch does not apply cleanly to the pinned SNESRecomp checkout.' }
   & git -C $Snes apply $Patch
-  if ($LASTEXITCODE -ne 0) { throw 'Could not apply the SNESRecomp IRQ task-switch patch.' }
-  $FrameSource = Get-Content -LiteralPath $FrameDriver -Raw
+  if ($LASTEXITCODE -ne 0) { throw 'Could not apply the Secret of Mana framework patch.' }
 }
-if ($FrameSource -notmatch 'interp_bridge_last_interrupt_return_pc') { throw 'SNESRecomp IRQ task-switch patch is not active.' }
-Write-Host "SNESRecomp patch $PatchSha verified and active"
-$RendererPatch = Join-Path $Root $Lock.renderer_patch.file
-$RendererPatchSha = (Get-FileHash -LiteralPath $RendererPatch -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($RendererPatchSha -ne $Lock.renderer_patch.sha256) { throw "Renderer patch SHA-256 mismatch: expected $($Lock.renderer_patch.sha256), found $RendererPatchSha" }
-$PpuSourcePath = Join-Path $Snes 'runner\src\snes\ppu.c'
-$PpuSource = Get-Content -LiteralPath $PpuSourcePath -Raw
-if ($PpuSource -notmatch 'new_renderer_supports_mode') {
-  & git -C $Snes apply --check $RendererPatch
-  if ($LASTEXITCODE -ne 0) { throw 'Renderer patch does not apply cleanly to the pinned SNESRecomp checkout.' }
-  & git -C $Snes apply $RendererPatch
-  if ($LASTEXITCODE -ne 0) { throw 'Could not apply the SNESRecomp mode 5 renderer patch.' }
-  $PpuSource = Get-Content -LiteralPath $PpuSourcePath -Raw
+$Missing = @($Markers | Where-Object { (Get-Content -LiteralPath $_.Path -Raw) -notmatch $_.Pattern })
+if ($Missing.Count -gt 0) {
+  throw ("Secret of Mana framework patch is not active: missing " + (($Missing | ForEach-Object { $_.Name }) -join ', '))
 }
-if ($PpuSource -notmatch 'new_renderer_supports_mode') { throw 'SNESRecomp mode 5 renderer fallback is not active.' }
-Write-Host "SNESRecomp mode 5 renderer patch $RendererPatchSha verified and active"
-$OutputPatch = Join-Path $Root $Lock.mode5_output_patch.file
-$OutputPatchSha = (Get-FileHash -LiteralPath $OutputPatch -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($OutputPatchSha -ne $Lock.mode5_output_patch.sha256) { throw "Mode 5 output patch SHA-256 mismatch: expected $($Lock.mode5_output_patch.sha256), found $OutputPatchSha" }
-$HostSourcePath = Join-Path $Snes 'runner\src\desktop\host_main.c'
-$HostSource = Get-Content -LiteralPath $HostSourcePath -Raw
-if ($HostSource -notmatch 'g_ppu_render_width') {
-  & git -C $Snes apply --check $OutputPatch
-  if ($LASTEXITCODE -ne 0) { throw 'Mode 5 output patch does not apply cleanly to the pinned renderer.' }
-  & git -C $Snes apply $OutputPatch
-  if ($LASTEXITCODE -ne 0) { throw 'Could not apply the Mode 5 logical-output patch.' }
-  $HostSource = Get-Content -LiteralPath $HostSourcePath -Raw
-}
-if ($HostSource -notmatch 'g_ppu_render_width') { throw 'SNES hires rendering does not preserve the logical output width.' }
-Write-Host "SNESRecomp Mode 5 logical output patch $OutputPatchSha verified and active"
+foreach ($Marker in $Markers) { Write-Host "SNESRecomp $($Marker.Name) patch $PatchSha verified and active" }
 if (-not $env:INCLUDE -and $env:OS -eq 'Windows_NT') {
   $VsWhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
   if (Test-Path -LiteralPath $VsWhere) {
