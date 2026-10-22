@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "dependencies": {
+    "snesrecomp": {
+      "repository": "https://github.com/SirL0LL0/snesrecomp.git",
+      "revision": "f68aa0fe8edae75cbc7d4b9473c71687b45ce702",
+      "path_from_workspace": "../snesrecomp"
+    },
+    "recomp-ui": {
+      "repository": "https://github.com/mstan/recomp-ui.git",
+      "revision": "11e0aa6c8466f177a12bea7ead1f86e7c140d325",
+      "path_from_workspace": "../snesrecomp/recomp-ui"
+    }
+  },
+  "build": {
+    "cmake_minimum": "3.20",
+    "generator": "Ninja",
+    "configuration": "Release",
+    "sdl3_version": "3.4.10",
+    "sdl3_sha256": "12b34280415ec8418c864408b93d008a20a6530687ee613d60bfbd20411f2785"
+  },
+  "framework_patch": {
+    "file": "patches/snesrecomp-som-irq-task-switch.patch",
+    "sha256": "5e85d111616eb0d83d8ecc219d966fcd4da03364f678403157402377a2d6bee9",
+    "applies_to": "dependencies.snesrecomp.revision"
+  },
+  "renderer_patch": {
+    "file": "patches/snesrecomp-mode5-renderer-fallback.patch",
+    "sha256": "35991a0e75686cd7fc6afd268b2f2870474dffb1c7e2c8316abeb5b00a24523d",
+    "applies_to": "dependencies.snesrecomp.revision"
+  },
+  "mode5_output_patch": {
+    "file": "patches/snesrecomp-mode5-logical-output.patch",
+    "sha256": "a8cc7f9bb81962a535f074f30fd526080f3a9375fe49410f687492776417cea4",
+    "applies_to": "renderer_patch"
+  }
+}

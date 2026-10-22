@@ -1,0 +1,17 @@
+﻿build/
+generated/
+coverage/runs/*
+!coverage/runs/.gitkeep
+rom.cfg
+keybinds.ini
+som_debug.log
+
+# Local test data: saves, investigation workspace, scene dumps (game data)
+saves/
+work/
+/last_run_report.json
+/opening_text.*
+/step_*
+# Its own repository (github.com/mstan/recomp-ui)
+snesrecomp/recomp-ui/
+

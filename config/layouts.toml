@@ -1,0 +1,171 @@
+schema_version = 1
+rom_revision = "Secret of Mana (USA) [T-It by Mumble Translation v2.0]"
+rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
+mapping = "HiROM"
+
+# WRAM objects use canonical memory-space addresses ($7E:OOOO).
+# Confidence reflects only what snesrecomp v2 has proven from this ROM image.
+# Add entries as disassembly/runtime analysis advances.
+
+[[object]]
+address = "WRAM:0000"
+name = g_som_stack_base
+type = "u8"
+size = 1
+confidence = "proven"
+tags = ["system", "stack"]
+provenance = "snesrecomp v2 AOT body at C1:4C30 (REP #$30, direct-page setup)"
+note = "Base of the direct page used by the reset/init body."
+
+[[object]]
+address = "WRAM:0002"
+name = g_som_direct_page_lo
+type = "u8"
+size = 1
+confidence = "proven"
+tags = ["system", "direct-page"]
+provenance = "snesrecomp v2 AOT body at C1:4C30 (writes to $0002..$0007)"
+note = "Direct-page register low byte saved during init."
+
+[[object]]
+address = "WRAM:001D"
+name = g_som_init_var_1d
+type = "u8"
+size = 1
+confidence = "proven"
+tags = ["init"]
+provenance = "snesrecomp v2 AOT body at C1:4C30"
+note = "Initialization variable written by the C1:4C30 body."
+
+[[object]]
+address = "WRAM:001E"
+name = g_som_init_var_1e
+type = "u8"
+size = 1
+confidence = "proven"
+tags = ["init"]
+provenance = "snesrecomp v2 AOT body at C1:4C30"
+note = "Initialization variable written by the C1:4C30 body."
+
+[[object]]
+address = "WRAM:002C"
+name = g_som_init_var_2c
+type = "u8"
+size = 1
+confidence = "proven"
+tags = ["init"]
+provenance = "snesrecomp v2 AOT body at C1:4C30"
+note = "Initialization variable written by the C1:4C30 body."
+
+[[object]]
+address = "WRAM:002D"
+name = g_som_init_var_2d
+type = "u8"
+size = 1
+confidence = "proven"
+tags = ["init"]
+provenance = "snesrecomp v2 AOT body at C1:4C30"
+note = "16-bit value written by the C1:4C30 body."
+
+[[object]]
+address = "WRAM:002A"
+name = g_som_init_var_2a
+type = "u8"
+size = 1
+confidence = "proven"
+tags = ["init"]
+provenance = "snesrecomp v2 AOT body at C1:4C30"
+note = "8-bit value written by the C1:4C30 body."
+
+[[object]]
+address = "WRAM:0007"
+name = g_som_init_var_07
+type = "u8"
+size = 1
+confidence = "proven"
+tags = ["init"]
+provenance = "snesrecomp v2 AOT body at C1:4C30"
+note = "Byte written during direct-page setup."
+
+# Block copy destination region ($0000..$007F) used by MVN in C1:4C30 body.
+[[object]]
+address = "WRAM:0000"
+name = g_som_mvn_dst_block
+type = "u8"
+size = 0x80
+count = 1
+confidence = "proven"
+tags = ["init", "memory-copy"]
+provenance = "snesrecomp v2 AOT body at C1:4C30 (MVN $C1->$00 count from A)"
+note = "Destination block for the bank-to-WRAM copy during reset init."
+
+[[structure]]
+name = SomInitFrame
+size = 0x08
+confidence = "proven"
+provenance = "snesrecomp v2 AOT body at C1:4C30 (stack frame layout)"
+note = "Stack frame used by the C1:4C30 initialization body."
+
+[[field]]
+structure = "SomInitFrame"
+offset = 0x00
+name = saved_db
+type = "u8"
+confidence = "proven"
+note = "Data bank register saved on stack."
+
+[[field]]
+structure = "SomInitFrame"
+offset = 0x01
+name = saved_a_lo
+type = "u8"
+confidence = "proven"
+note = "Accumulator low byte saved on stack."
+
+[[field]]
+structure = "SomInitFrame"
+offset = 0x02
+name = saved_a_hi
+type = "u8"
+confidence = "proven"
+note = "Accumulator high byte saved on stack (16-bit mode)."
+
+[[field]]
+structure = "SomInitFrame"
+offset = 0x03
+name = saved_d_lo
+type = "u8"
+confidence = "proven"
+note = "Direct page register low byte saved on stack."
+
+[[field]]
+structure = "SomInitFrame"
+offset = 0x04
+name = saved_d_hi
+type = "u8"
+confidence = "proven"
+note = "Direct page register high byte saved on stack."
+
+[[field]]
+structure = "SomInitFrame"
+offset = 0x05
+name = saved_x_lo
+type = "u8"
+confidence = "proven"
+note = "X register low byte saved on stack."
+
+[[field]]
+structure = "SomInitFrame"
+offset = 0x06
+name = saved_x_hi
+type = "u8"
+confidence = "proven"
+note = "X register high byte saved on stack."
+
+[[field]]
+structure = "SomInitFrame"
+offset = 0x07
+name = saved_y_lo
+type = "u8"
+confidence = "proven"
+note = "Y register low byte saved on stack."

@@ -1,0 +1,99 @@
+diff --git a/runner/src/generic_frame_driver.c b/runner/src/generic_frame_driver.c
+--- a/runner/src/generic_frame_driver.c
++++ b/runner/src/generic_frame_driver.c
+@@ -52,6 +52,7 @@
+  * terminal RTI returns into that instruction stream. */
+ static void run_interrupt(uint32_t vector, uint64_t frame_end) {
+     cpu_push_interrupt_frame_at(&g_cpu, s_resume_pc);
++    interp_bridge_clear_lle_resume_pc();
+     interp_bridge_set_master_deadline(frame_end);
+     (void)interp_bridge_run_interrupt(&g_cpu, vector);
+     /* Clearing matters: a deadline left armed stays true for every AOT block
+@@ -59,7 +60,9 @@
+      * yield-unwind. */
+     interp_bridge_set_master_deadline(0);
+     {
+-        uint32_t resume = interp_bridge_lle_resume_pc();
++        uint32_t resume = interp_bridge_last_interrupt_return_pc();
++        if (!resume) resume = interp_bridge_last_exit_pc();
++        if (!resume) resume = interp_bridge_lle_resume_pc();
+         if (resume) s_resume_pc = resume;
+     }
+ }
+@@ -145,10 +148,13 @@
+         if (line == trigger) {
+             g_snes->inIrq = true;
+             cpu_push_interrupt_frame_at(&g_cpu, s_resume_pc);
++            interp_bridge_clear_lle_resume_pc();
+             (void)interp_bridge_run_interrupt(&g_cpu, irq_vector());
+             g_snes->inIrq = false;
+             {
+-                uint32_t resume = interp_bridge_lle_resume_pc();
++                uint32_t resume = interp_bridge_last_interrupt_return_pc();
++                if (!resume) resume = interp_bridge_last_exit_pc();
++                if (!resume) resume = interp_bridge_lle_resume_pc();
+                 if (resume) s_resume_pc = resume;
+             }
+             trigger = g_snes->vIrqEnabled ? (int)g_snes->vTimer : -1;
+diff --git a/runner/src/snes/interp_bridge.c b/runner/src/snes/interp_bridge.c
+--- a/runner/src/snes/interp_bridge.c
++++ b/runner/src/snes/interp_bridge.c
+@@ -407,7 +407,9 @@
+     in->n  = c->_flag_N; in->i = c->_flag_I; in->d = c->_flag_D;
+     in->mf = c->m_flag;  in->xf = c->x_flag; in->e = c->emulation;
+ }
++static uint32_t s_interp_exit_pc24;
+ static void sync_interp_to_cpu(const Interp816 *in, CpuState *c) {
++    s_interp_exit_pc24 = ((uint32_t)in->k << 16) | in->pc;
+     c->A = in->a;  c->X = in->x;  c->Y = in->y;
+     c->S = in->sp; c->D = in->dp; c->DB = in->db; c->PB = in->k;
+     c->_flag_C = in->c; c->_flag_Z = in->z; c->_flag_V = in->v;
+@@ -521,6 +523,7 @@
+ static int      s_lle_unwind_is_deadline = 0;
+ static int      s_lle_next_unwind_is_deadline = 0;
+ static uint32_t s_lle_resume_pc24   = 0;
++static uint32_t s_interp_int_return_pc24 = 0;
+ static int      s_interp_pctrace    = 0;
+ static int      s_lle_wai_yield     = 0;
+ static int      s_lle_quiescent_yield = 0;
+@@ -799,6 +802,9 @@
+     return 1;
+ }
+ uint32 interp_bridge_lle_resume_pc(void) { return s_lle_resume_pc24; }
++void interp_bridge_clear_lle_resume_pc(void) { s_lle_resume_pc24 = 0; }
++uint32_t interp_bridge_last_interrupt_return_pc(void) { return s_interp_int_return_pc24; }
++uint32_t interp_bridge_last_exit_pc(void) { return s_interp_exit_pc24; }
+ void interp_bridge_set_lle_resume_pc(uint32_t pc) {
+     lle_resume_set(pc, INTERP_RESUME_SITE_EXTERNAL, 0);
+ }
+@@ -2570,6 +2576,7 @@
+          * P/PC/PB here; host control flow deliberately discards guest PC/PB.
+          * Do not continue interpreting at the placeholder return address. */
+         if (stop_on_rti && op == 0x40) {
++            s_interp_int_return_pc24 = ((uint32_t)in.k << 16) | in.pc;
+             sync_interp_to_cpu(&in, cpu);
+             bridge_apu_flush(cpu);
+             return 1;
+@@ -3115,6 +3122,8 @@
+      * runs an architectural interrupt handler through, so counting here
+      * cannot miss a delivery the way a per-host hook would. */
+     ppudma_note_interrupt(g_snes && g_snes->inNmi);
++    s_interp_int_return_pc24 = 0;
++    s_interp_exit_pc24 = 0;
+     return interp_bridge_run_ex2(cpu, entry_pc24, cpu->S, NULL, NULL,
+                                  0, 0, 0, 0, NULL, 0, 1);
+ }
+diff --git a/runner/src/snes/interp_bridge.h b/runner/src/snes/interp_bridge.h
+--- a/runner/src/snes/interp_bridge.h
++++ b/runner/src/snes/interp_bridge.h
+@@ -181,6 +181,10 @@
+ uint32_t interp_bridge_lle_resume_pc(void);
+ /* Host override of the resume PC (recorded in the resume ring as external). */
+ void interp_bridge_set_lle_resume_pc(uint32_t pc);
++/* Clear/read the resume PCs captured while servicing an interrupt. */
++void interp_bridge_clear_lle_resume_pc(void);
++uint32_t interp_bridge_last_interrupt_return_pc(void);
++uint32_t interp_bridge_last_exit_pc(void);
+ 
+ /*
+  * Rollback support: the bridge carries execution state across frames that no

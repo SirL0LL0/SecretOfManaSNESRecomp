@@ -1,0 +1,19 @@
+format_version = 1
+id = "som.translation-fixes"
+version = "1.0.0"
+name = "Italian translation fixes"
+author = "secret-of-mana-recomp"
+description = "Corrections to the event script of the Italian translation (Mumble Translation v2.0)."
+resolver = "declarative"
+
+# The Italian translation (Mumble Translation v2.0) this executable verifies.
+[[target]]
+game_id = "secret-of-mana"
+rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
+
+[[feature]]
+id = "fixes"
+name = "Italian translation fixes"
+group = "Translation"
+description = "Applied in memory at launch; the ROM file is never modified. Bridge at the waterfall (prologue): Timothy's line \"Dev'essere una specie di tesoro!\" began outside the text box, then appeared in a borderless box shifted to the right. Takes effect on the next launch."
+default_enabled = true

@@ -1,0 +1,32 @@
+format_version = 1
+id = "som.msu1"
+version = "1.0.0"
+name = "MSU-1 Music"
+author = "DarkShock (MSU-1 hack), David Thomas / GinBunBun, NTI Productions (music)"
+description = "CD-quality music through MSU-1, from DarkShock's Secret of Mana MSU-1 hack v1.0."
+resolver = "declarative"
+
+# The Italian translation (Mumble Translation v2.0) this executable verifies.
+[[target]]
+game_id = "secret-of-mana"
+rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
+
+[[feature]]
+id = "msu1"
+name = "MSU-1 Music"
+group = "Music"
+description = "Plays the music pack's PCM tracks instead of the SPC music. A track missing from the pack falls back to the SPC. The hack's logic runs in the executable (src/som_msu1_patch.c), so the ROM is not patched. Takes effect on the next launch."
+default_enabled = false
+
+# Provided by the executable: the hack's music-command hook and its fade.
+[[plugin]]
+feature = "msu1"
+id = "som.msu1"
+
+[[resource]]
+feature = "msu1"
+id = "pack"
+label = "Music pack folder"
+description = "The folder holding the pack's som_msu1-0.pcm ... som_msu1-58.pcm."
+format = "directory"
+required = true

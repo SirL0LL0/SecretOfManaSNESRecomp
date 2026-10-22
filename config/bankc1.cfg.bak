@@ -1,0 +1,22 @@
+# Secret of Mana (USA) [T-It by Mumble Translation v2.0] — bank $C1
+# Derived from snesrecomp v2 analysis of the Italian patch ROM.
+# ROM SHA-256: 8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275
+# Mapping: HiROM
+
+bank = 0xC1
+tier_down_stubs
+
+# $C1:0010 — reset continuation target (M1X1 AOT-eligible)
+func bank_C1_0010 0010 end:00FF entry_mx:1,1
+
+# $C1:4C30 — main initialization body (M1X0 AOT-eligible, 80 instructions)
+func bank_C1_4C30 4C30 end:4DFF entry_mx:1,0
+
+# $C1:4CE5 — call target from 4C30 (LLE-only, truncated continuation)
+func bank_C1_4CE5 4CE5 end:4CFF entry_mx:1,1
+
+# $C1:4D0F — call target from 4CE5 (LLE-only, truncated continuation)
+func bank_C1_4D0F 4D0F end:4DFF entry_mx:1,1
+
+# $C1:0018 — jump target from bank $00 (seen in disassembly)
+func bank_C1_0018 0018 end:00FF entry_mx:1,1

@@ -1,0 +1,249 @@
+format_version = 1
+id = "som.cheats"
+version = "1.0.0"
+name = "Cheats"
+author = "Almar's Guides (Pro Action Replay), RPGClassics (RAM map, Galoob Game Genie list)"
+description = "Cheat codes that work on the recompiled game: RAM codes, rewritten every frame, and codes that change game data (prices, stats, event scripts)."
+resolver = "declarative"
+
+# The Italian translation (Mumble Translation v2.0) this executable verifies.
+[[target]]
+game_id = "secret-of-mana"
+rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
+
+[[feature]]
+id = "cheats"
+name = "Cheats"
+group = "Cheats"
+description = "Turn the feature on, then the cheats you want. Codes that patch the game's instructions are not offered: recompiled code would ignore them. Takes effect on the next launch."
+default_enabled = false
+
+# Provided by the executable (src/som_cheats.c): the per-frame RAM writes.
+[[plugin]]
+feature = "cheats"
+id = "som.cheats"
+
+[[option]]
+feature = "cheats"
+id = "unlimited_hp"
+label = "Unlimited HP (Hero, Girl, Sprite)"
+description = "Keeps current HP at max HP (7EE182/E184, 7EE382/E384, 7EE582/E584)."
+group = "Characters"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "no_status"
+label = "No negative status effects (Hero)"
+description = "7EE19100. Also keeps the Hero from dying."
+group = "Characters"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "girl_mp"
+label = "Unlimited Girl magic (MP 99)"
+description = "7EE38663"
+group = "Characters"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "sprite_mp"
+label = "Unlimited Sprite magic (MP 99)"
+description = "7EE58663"
+group = "Characters"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "walk_through_walls"
+label = "Walk through walls"
+description = "7EE00BFF, 7EE20BFF, 7EE40BFF (Hero, Girl, Sprite). Outdoors only."
+group = "Characters"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "girl_elementals"
+label = "All of the Girl's elementals at level 8"
+description = "7EE3C488, 7EE3C588, 7EE3C688, 7EE3C708"
+group = "Magic"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "sprite_elementals"
+label = "All of the Sprite's elementals at level 8"
+description = "7EE5C488, 7EE5C588, 7EE5C688, 7EE5C780"
+group = "Magic"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "mana_powers"
+label = "Have all Mana powers"
+description = "7ECF9001 through 7ECF9701. Applied once a game is running."
+group = "Magic"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "full_power"
+label = "Weapon recovery always 100%"
+description = "7EE1ED00, 7EE3ED00, 7EE5ED00: every hit at full power."
+group = "Combat"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "instant_charge"
+label = "Instant charge"
+description = "7EE01A2C"
+group = "Combat"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "max_attacks"
+label = "All players' attacks are max"
+description = "7EE198FF, 7EE398FF, 7EE598FF"
+group = "Combat"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "one_shot"
+label = "One-shot all enemies"
+description = "7EE98200, 7EE98300, 7EEB8200, 7EEB8300, 7EE78200, 7EE78300"
+group = "Combat"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "sword_strength"
+label = "100% sword strength"
+description = "7EE77BE7, 7E00F46E"
+group = "Combat"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "sword_level"
+label = "Hero's sword experience at 99"
+description = "7EE1D163"
+group = "Weapons"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "weapon_levels"
+label = "All weapons at level 8 (Hero, Girl, Sprite)"
+description = "7EE1C0-C3, 7EE3C0-C3, 7EE5C0-C3 = 88"
+group = "Weapons"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "all_orbs"
+label = "Nine weapon orbs, all forged, for every weapon"
+description = "7ECFB0-BF = 08. Applied once a game is running."
+group = "Weapons"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "mana_sword"
+label = "The sword is the Mana Sword"
+description = "7ECC5548. Applied once a game is running."
+group = "Weapons"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "level16_stats"
+label = "Stats at level 16 are 90"
+description = "Game Genie 9C06-81AD, 9C06-85DD, 9C06-850D, 9C06-856D, 9C06-85AD: Strength, Agility, Constitution, Intelligence and Wisdom on reaching level 16."
+group = "Characters"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "max_money"
+label = "Max money"
+description = "7ECC6CBF. Applied once a game is running."
+group = "Money"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "unlimited_gold"
+label = "Unlimited gold (999,999)"
+description = "7ECC6A3F, 7ECC6B42, 7ECC6C0F: the game's maximum. The listed 7ECC6AFF, 7ECC6BFF, 7ECC6CFF would be 16,777,215, past the six-digit counter. Applied once a game is running."
+group = "Money"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "free_consumables"
+label = "Candy, Chocolate, Royal Jam, Faerie Walnut, Medical Herb and Cup of Wishes cost nothing"
+description = "D8FB9C00 ... D8FBA600 (Game Genie DDEB-E544, DDEB-E5C4, DDEC-E044, DDEC-E0C4 + DDEC-E034, DDEC-E944, DDEC-E9C4). You still need enough money to be allowed to buy."
+group = "Money"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "free_starter_gear"
+label = "Overalls, Bandanna, Hair Ribbon, Rabite Cap and Wristband cost nothing"
+description = "Game Genie DDE3-E044, DDE8-E9C4, DDE8-E144, DDE8-E1C4, DDE7-7047. You still need enough money to be allowed to buy."
+group = "Money"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "neko_inn_free"
+label = "Neko's inn costs nothing (instead of 30)"
+description = "Game Genie DDAB-E715, moved to where the translation keeps that price."
+group = "Money"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "elder_chest_gold"
+label = "The chest in the Elder's basement in Potos gives about 65,000 GP"
+description = "Game Genie EE6B-8738 / PAR CA8E9FFF, moved to where the translation keeps that chest."
+group = "Money"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "cheats"
+id = "elder_chest_repeat"
+label = "The chest in the Elder's basement in Potos can be opened repeatedly"
+description = "PAR CA8EAFFE, moved to where the translation keeps that chest."
+group = "Money"
+type = "boolean"
+default = false

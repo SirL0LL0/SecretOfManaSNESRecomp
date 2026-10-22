@@ -1,0 +1,7 @@
+# Reach the intro, then press Start and capture the first post-Start frame.
+wait 900
+dump intro
+press start 4
+wait 260
+dump after_start
+quit

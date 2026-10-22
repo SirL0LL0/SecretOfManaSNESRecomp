@@ -1,0 +1,69 @@
+schema_version = 1
+rom_revision = "Secret of Mana (USA) [T-It by Mumble Translation v2.0]"
+rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
+
+# `address` is the actual supported-ROM CFG entry.
+# Add entries as disassembly/runtime analysis advances.
+
+[[function]]
+address = "00:8004"
+name = "som_reset"
+aliases = ["I_RESET"]
+confidence = "proven"
+tags = ["reset", "bootstrap"]
+provenance = "snesrecomp v2 analysis (M1X1 AOT-eligible, tail-call to C1:0010)"
+note = "RESET vector handler; switches to bank $C1 and tail-calls bank_C1_0010."
+
+[[function]]
+address = "00:80EA"
+name = "som_nmi"
+aliases = ["I_NMI"]
+confidence = "proven"
+tags = ["nmi", "vector"]
+provenance = "snesrecomp v2 analysis (NMI vector entry)"
+note = "NMI vector entry point."
+
+[[function]]
+address = "00:80EE"
+name = "som_irq"
+aliases = ["I_IRQ"]
+confidence = "proven"
+tags = ["irq", "vector"]
+provenance = "snesrecomp v2 analysis (IRQ vector entry)"
+note = "IRQ vector entry point."
+
+[[function]]
+address = "C1:0010"
+name = "som_reset_continuation"
+aliases = ["bank_C1_0010"]
+confidence = "proven"
+tags = ["reset-continuation", "cross-bank"]
+provenance = "snesrecomp v2 analysis (M1X1 AOT-eligible, JML to C1:4CE5 LLE)"
+note = "Reset continuation target; JMLs back into bank $C1 at $4CE5 (LLE)."
+
+[[function]]
+address = "C1:4C30"
+name = "som_init_body"
+aliases = ["bank_C1_4C30"]
+confidence = "proven"
+tags = ["init", "boot-body"]
+provenance = "snesrecomp v2 analysis (M1X0 AOT-eligible, 80 instructions)"
+note = "Main initialization body: direct-page setup, register saves, MVN copy, stack frame."
+
+[[function]]
+address = "C1:4CE5"
+name = "som_init_continuation_a"
+aliases = ["bank_C1_4CE5"]
+confidence = "contextual"
+tags = ["init-continuation", "lle-only"]
+provenance = "snesrecomp v2 analysis (LLE-only, truncated call continuation)"
+note = "Call target from C1:4C30; continuation not proven statically."
+
+[[function]]
+address = "C1:4D0F"
+name = "som_init_continuation_b"
+aliases = ["bank_C1_4D0F"]
+confidence = "contextual"
+tags = ["init-continuation", "lle-only"]
+provenance = "snesrecomp v2 analysis (LLE-only, truncated call continuation)"
+note = "Call target from C1:4CE5; calls back to C1:4C30 (LLE)."

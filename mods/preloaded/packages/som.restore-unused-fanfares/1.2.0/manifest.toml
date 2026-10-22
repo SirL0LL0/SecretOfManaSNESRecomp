@@ -1,0 +1,28 @@
+format_version = 1
+id = "som.restore-unused-fanfares"
+version = "1.2.0"
+name = "Restore Unused Fanfares"
+author = "Kethinov (port to the Italian translation)"
+description = "Plays the two unused fanfares: one when receiving the Sea Hare's Tail, one when receiving the Moogle Belt."
+resolver = "declarative"
+
+# The Italian translation (Mumble Translation v2.0) this executable verifies.
+[[target]]
+game_id = "secret-of-mana"
+rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
+
+[[feature]]
+id = "restore"
+name = "Restore Unused Fanfares"
+group = "Music"
+description = "Kethinov's Restore Unused Fanfares 1.2, relocated to the Italian ROM. Applied in memory at launch; the ROM file is never modified. Takes effect on the next launch."
+default_enabled = false
+
+# Same three records as the original patch, moved to where the translation
+# keeps them (US 09B923/09CA6E/0A0E44 -> 09A6BD/09B6D1/0A0DE2). src/som_main.c
+# applies it before SnesInit and checks the result against target_sha256.
+[[patch]]
+feature = "restore"
+id = "fanfares"
+file = "restore-unused-fanfares-it.ips"
+target_sha256 = "96b0d01ea873595bc5343a0cb7786c9abfe53febb2e1b495b34d7cc84eb9ce40"

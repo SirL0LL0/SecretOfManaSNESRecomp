@@ -1,0 +1,5 @@
+name=Secret of Mana
+rom_file=Secret of Mana (USA) [T-It by Mumble Translation v2.0].sfc
+rom_sha256=8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275
+normalized_size=3145728
+mapping=hirom
