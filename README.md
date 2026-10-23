@@ -1,5 +1,7 @@
 # Secret of Mana recompilation project
 
+> **Suspended (2026-10-23).** See [ARCHIVE.md](ARCHIVE.md) for the state, the open waterfall issue and the analysis tools.
+
 This project builds a desktop runner and a headless runner around generated SNESRecomp code.
 
 ## Reproducible build
