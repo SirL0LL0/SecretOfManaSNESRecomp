@@ -1,0 +1,31 @@
+format_version = 1
+id = "som.title-restoration"
+version = "1.0.0"
+name = "Title Screen Restoration"
+author = "Queue (from Secret of Mana Plus 2.1 by Tomm)"
+description = "Restores the Japanese title screen image: the whole Mana Tree in the background instead of the English release's cropped, enlarged one."
+resolver = "declarative"
+
+# The original US release the player provides. The Italian translation, when
+# selected in the launcher, is applied to it in memory before the mods.
+[[target]]
+game_id = "secret-of-mana"
+rom_sha256 = "4c15013131351e694e05f22e38bb1b3e4031dedac77ec75abecebe8520d82d5f"
+
+
+[[feature]]
+id = "restore"
+name = "Title Screen Restoration"
+group = "Graphics"
+description = "Queue's restoration of the Japanese title image, taken from the Secret of Mana Plus 2.1 patch you choose (any difficulty). Only the title image and the routine that loads it are used: the rest of Secret of Mana Plus is not applied. Applied in memory at launch; the ROM file is never modified. Takes effect on the next launch."
+default_enabled = false
+
+[[resource]]
+feature = "restore"
+id = "somplus"
+label = "Secret of Mana Plus 2.1 patch"
+description = "Any of the SoMPlus2.1 .ips files from the Secret of Mana Plus 2.1 archive (romhacking.net hack 8491), for example \"[Normal]SoMPlus2.1.ips\"."
+format = "file"
+file_patterns = "*.ips"
+file_description = "Secret of Mana Plus 2.1 patch (.ips)"
+required = true
