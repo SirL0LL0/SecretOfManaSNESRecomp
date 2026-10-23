@@ -131,6 +131,13 @@ static uint8_t TrackControl(uint8_t song) {
     return 0x03;
 }
 
+/* Gain for tracks of the pack mastered far below the rest: the title theme
+ * ($2C) averages -24.8 dBFS against about -15 for the others and opens with
+ * 80 s of peaks near 3000. msu1 limits the loud passages. */
+static double TrackGain(uint8_t song) {
+    return song == 0x2C ? 3.0 : 1.0;
+}
+
 /* Select a track and wait out the busy bit. True when the track exists. */
 static bool MsuSelect(uint8_t track) {
     msu1_write(kMsuTrackLo, track);
@@ -158,6 +165,7 @@ static bool MsuPlayMusic(CpuState *cpu) {
         return true;
     }
     fprintf(stderr, "[MSU-1] song $%02X: track %u\n", song, song);
+    msu1_set_track_gain(TrackGain(song));
     msu1_write(kMsuControl, TrackControl(song));
     msu1_write(kMsuVolume, kFullVolume);
     g_ram[kFadeVolume + 1] = kFullVolume;
@@ -287,6 +295,7 @@ void SomMsu1PatchTimelineJumped(void) {
         s_track = -1;
         return;
     }
+    msu1_set_track_gain(TrackGain(song));
     msu1_write(kMsuControl, TrackControl(song));
     msu1_write(kMsuVolume, g_ram[kFadeVolume + 1]);
     s_track = song;

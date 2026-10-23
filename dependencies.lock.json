@@ -4,7 +4,7 @@
     "snesrecomp": {
       "repository": "https://github.com/SirL0LL0/snesrecomp.git",
       "branch": "som-upstream-2026-10-23",
-      "revision": "e2c4d2b90e6356427f1a9b879b40f6ebbd20dd1d",
+      "revision": "cab843d36e0b26e907d5af07ab843d368b7d0594",
       "based_on": "https://github.com/mstan/snesrecomp.git 86c80cb",
       "path_from_workspace": "../snesrecomp"
     },
