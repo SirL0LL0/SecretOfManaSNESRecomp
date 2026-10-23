@@ -16,36 +16,24 @@ check_pin() {
 }
 check_pin snesrecomp "$SNESRECOMP_ROOT" "$(pin_value snesrecomp revision)" "$(pin_value snesrecomp repository)"
 check_pin recomp-ui "$RECOMP_UI_ROOT" "$(pin_value recomp-ui revision)" "$(pin_value recomp-ui repository)"
-PATCH_FILE="$ROOT/$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["framework_patch"]["file"])' "$LOCK")"
-PATCH_EXPECTED=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["framework_patch"]["sha256"])' "$LOCK")
+# The Secret of Mana framework changes live on the pinned snesrecomp fork
+# commit. recomp-ui is upstream plus one patch: the launcher's language
+# selector, translation-file picker and Italian strings.
+ui_patch_value() {
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["ui_patch"][sys.argv[2]])' "$LOCK" "$1"
+}
+PATCH_FILE="$ROOT/$(ui_patch_value file)"
+PATCH_EXPECTED=$(ui_patch_value sha256)
+PATCH_MARKER=$(ui_patch_value marker)
 PATCH_ACTUAL=$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$PATCH_FILE")
-[ "$PATCH_ACTUAL" = "$PATCH_EXPECTED" ] || { echo "Framework patch SHA-256 mismatch: $PATCH_FILE" >&2; exit 1; }
-FRAME_DRIVER="$SNESRECOMP_ROOT/runner/src/generic_frame_driver.c"
-PPU_SOURCE="$SNESRECOMP_ROOT/runner/src/snes/ppu.c"
-HOST_SOURCE="$SNESRECOMP_ROOT/runner/src/desktop/host_main.c"
-# The single patch carries every Secret of Mana framework change: the IRQ
-# task-switch fix, the Mode 5 renderer fallback, the Mode 5 logical output and
-# the intro raster journal. All four markers are checked after it is applied.
-missing=0
-for marker in "interp_bridge_last_interrupt_return_pc:$FRAME_DRIVER" \
-               "new_renderer_supports_mode:$PPU_SOURCE" \
-               "g_ppu_render_width:$HOST_SOURCE" \
-               "ppu_rasterApplyLine:$FRAME_DRIVER"; do
-  pattern=${marker%%:*}; file=${marker#*:}
-  grep -q "$pattern" "$file" || missing=1
-done
-if [ "$missing" -ne 0 ]; then
-  git -C "$SNESRECOMP_ROOT" apply --check "$PATCH_FILE"
-  git -C "$SNESRECOMP_ROOT" apply "$PATCH_FILE"
+[ "$PATCH_ACTUAL" = "$PATCH_EXPECTED" ] || { echo "recomp-ui patch SHA-256 mismatch: $PATCH_FILE" >&2; exit 1; }
+UI_HEADER="$RECOMP_UI_ROOT/src/recomp_launcher.h"
+if ! grep -q "$PATCH_MARKER" "$UI_HEADER"; then
+  git -C "$RECOMP_UI_ROOT" apply --check "$PATCH_FILE"
+  git -C "$RECOMP_UI_ROOT" apply "$PATCH_FILE"
 fi
-for marker in "interp_bridge_last_interrupt_return_pc:$FRAME_DRIVER" \
-               "new_renderer_supports_mode:$PPU_SOURCE" \
-               "g_ppu_render_width:$HOST_SOURCE" \
-               "ppu_rasterApplyLine:$FRAME_DRIVER"; do
-  pattern=${marker%%:*}; file=${marker#*:}
-  grep -q "$pattern" "$file" || { echo "Secret of Mana framework patch is not active ($pattern)" >&2; exit 1; }
-done
-echo "SNESRecomp patch $PATCH_ACTUAL verified and active"
+grep -q "$PATCH_MARKER" "$UI_HEADER" || { echo "Secret of Mana recomp-ui patch is not active" >&2; exit 1; }
+echo "recomp-ui patch $PATCH_ACTUAL verified and active"
 cmake -S "$ROOT" -B "$ROOT/build" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DSNESRECOMP_ROOT=$SNESRECOMP_ROOT" "-DRECOMP_UI_ROOT=$RECOMP_UI_ROOT"
 cmake --build "$ROOT/build" --config Release --parallel
 printf 'Built %s and %s\n' "$ROOT/build/som_recomp" "$ROOT/build/som_headless"

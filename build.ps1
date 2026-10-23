@@ -28,37 +28,22 @@ function Assert-Pin($Name, $Path, $Pin) {
 }
 Assert-Pin 'snesrecomp' $Snes $Lock.dependencies.snesrecomp
 Assert-Pin 'recomp-ui' $Ui $Lock.dependencies.'recomp-ui'
-$Patch = Join-Path $Root $Lock.framework_patch.file
-if (-not (Test-Path -LiteralPath $Patch)) { throw "Framework patch not found: $Patch" }
+# The Secret of Mana framework changes live on the pinned snesrecomp fork
+# commit. recomp-ui is upstream plus one patch: the launcher's language
+# selector, translation-file picker and Italian strings.
+$Patch = Join-Path $Root $Lock.ui_patch.file
+if (-not (Test-Path -LiteralPath $Patch)) { throw "recomp-ui patch not found: $Patch" }
 $PatchSha = (Get-FileHash -LiteralPath $Patch -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($PatchSha -ne $Lock.framework_patch.sha256) { throw "Framework patch SHA-256 mismatch: expected $($Lock.framework_patch.sha256), found $PatchSha" }
-$FrameDriver = Join-Path $Snes 'runner\src\generic_frame_driver.c'
-$FrameSource = Get-Content -LiteralPath $FrameDriver -Raw
-$PpuSourcePath = Join-Path $Snes 'runner\src\snes\ppu.c'
-$PpuSource = Get-Content -LiteralPath $PpuSourcePath -Raw
-$HostSourcePath = Join-Path $Snes 'runner\src\desktop\host_main.c'
-$HostSource = Get-Content -LiteralPath $HostSourcePath -Raw
-# The single patch carries every Secret of Mana framework change: the IRQ
-# task-switch fix, the Mode 5 renderer fallback, the Mode 5 logical output and
-# the intro raster journal. All four markers are checked after it is applied.
-$Markers = @(
-  @{ Path = $FrameDriver; Pattern = 'interp_bridge_last_interrupt_return_pc'; Name = 'IRQ task-switch' },
-  @{ Path = $PpuSourcePath; Pattern = 'new_renderer_supports_mode'; Name = 'Mode 5 renderer fallback' },
-  @{ Path = $HostSourcePath; Pattern = 'g_ppu_render_width'; Name = 'Mode 5 logical output' },
-  @{ Path = $FrameDriver; Pattern = 'ppu_rasterApplyLine'; Name = 'intro raster journal' }
-)
-$Missing = @($Markers | Where-Object { (Get-Content -LiteralPath $_.Path -Raw) -notmatch $_.Pattern })
-if ($Missing.Count -gt 0) {
-  & git -C $Snes apply --check $Patch
-  if ($LASTEXITCODE -ne 0) { throw 'Framework patch does not apply cleanly to the pinned SNESRecomp checkout.' }
-  & git -C $Snes apply $Patch
-  if ($LASTEXITCODE -ne 0) { throw 'Could not apply the Secret of Mana framework patch.' }
+if ($PatchSha -ne $Lock.ui_patch.sha256) { throw "recomp-ui patch SHA-256 mismatch: expected $($Lock.ui_patch.sha256), found $PatchSha" }
+$UiHeader = Join-Path $Ui 'src\recomp_launcher.h'
+if ((Get-Content -LiteralPath $UiHeader -Raw) -notmatch $Lock.ui_patch.marker) {
+  & git -C $Ui apply --check $Patch
+  if ($LASTEXITCODE -ne 0) { throw 'recomp-ui patch does not apply cleanly to the pinned recomp-ui checkout.' }
+  & git -C $Ui apply $Patch
+  if ($LASTEXITCODE -ne 0) { throw 'Could not apply the Secret of Mana recomp-ui patch.' }
 }
-$Missing = @($Markers | Where-Object { (Get-Content -LiteralPath $_.Path -Raw) -notmatch $_.Pattern })
-if ($Missing.Count -gt 0) {
-  throw ("Secret of Mana framework patch is not active: missing " + (($Missing | ForEach-Object { $_.Name }) -join ', '))
-}
-foreach ($Marker in $Markers) { Write-Host "SNESRecomp $($Marker.Name) patch $PatchSha verified and active" }
+if ((Get-Content -LiteralPath $UiHeader -Raw) -notmatch $Lock.ui_patch.marker) { throw 'Secret of Mana recomp-ui patch is not active.' }
+Write-Host "recomp-ui patch $PatchSha verified and active"
 if (-not $env:INCLUDE -and $env:OS -eq 'Windows_NT') {
   $VsWhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
   if (Test-Path -LiteralPath $VsWhere) {

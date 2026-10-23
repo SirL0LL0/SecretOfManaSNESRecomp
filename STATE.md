@@ -115,13 +115,14 @@ Script: `press X N` = N frame di pressione **+ 1 idle**; i tag dei dump possono 
 
 ## 6. Prossimi passi
 
-0. **Lingue** (2026-10-23, fatto per l'italiano): il launcher accetta il ROM **originale americano**;
-   il pacchetto `som.language` lo trasforma in memoria nell'immagine da cui è stato generato il codice
-   (IPS 160 KB, 5% dell'immagine; verificato: framebuffer/VRAM/WRAM/OAM/CGRAM/registri **identici** al
-   run con il ROM italiano). **Scope: solo inglese → italiano** (decisione dell'utente): il codice
-   eseguibile è quello della traduzione, quindi la release inglese è la base da cui parte la patch,
-   non una lingua che il giocatore sceglie. Il ROM giapponese (differisce del 92,8% ⇒ altro gioco)
-   e le altre lingue restano fuori scope.
+0. **Lingue** (2026-10-23, aggiornato): codice generato dal ROM **USA** (framework upstream 86c80cb +
+   modifiche SoM, fork `som-upstream-2026-10-23`). Solo il ROM ⇒ inglese. L'italiano (Mumble v2.01,
+   `Secret of Mana (USA).ips`, fornito dall'utente) si attiva da **Impostazioni → Localizzazione**: il
+   selettore è abilitato solo dopo che il file è stato verificato (SHA-256). La patch è applicata in
+   memoria in `patch_rom_ex` (`SomApplyLanguage`); gli unici 10 byte di codice che cambiano (9 operandi
+   `LDX #ptr; JSR $5C2A` in C0) sono `live_operand` in `config/bankc0.cfg`. Launcher e menu in inglese
+   per default, in italiano solo con Italiano selezionato. Il pacchetto `som.language` e le
+   "translation fixes" sono stati rimossi (la v2.01 corregge già il ponte).
 1. **Ritardo di 1-2 frame dopo il primo Start**: piccolo, ma da spiegare (budget cicli del frame? costo
    dei polling in vblank?). La chiave di allineamento è lo scroll BG1 (le due timeline coincidono
    esattamente fino a f2550).
@@ -146,9 +147,9 @@ Script: `press X N` = N frame di pressione **+ 1 idle**; i tag dei dump possono 
 - PPU/journal: `secret-of-mana-recomp/snesrecomp/runner/src/snes/ppu.c`, `ppu.h`
 - Presentazione (larghezza 256 vs 512): `secret-of-mana-recomp/snesrecomp/runner/src/desktop/host_main.c` (~L1409)
 - Build: `secret-of-mana-recomp/build/som_recomp.exe` · Script: `secret-of-mana-recomp/build/*.script`
-- Patch riproducibile verso il framework pinnato: `secret-of-mana-recomp/patches/snesrecomp-som-intro-timing.patch`
-  (unico patch: IRQ task-switch + fallback renderer mode 5 + output logico mode 5 + raster journal;
-  SHA-256 in `dependencies.lock.json`, applicato da `build.ps1`/`build.sh` sul checkout gemello `../snesrecomp`)
+- Framework: fork SirL0LL0/snesrecomp, branch `som-upstream-2026-10-23` (pin in `dependencies.lock.json`);
+  recomp-ui upstream + `patches/recomp-ui-som-language.patch` (applicato da `build.ps1`/`build.sh`)
+- Codice generato: `tools/generate.ps1 -Rom <ROM USA>` (non va nel repository)
 - Dump recomp: `secret-of-mana-recomp/work/tree/**` · Riferimento Mesen: `SOM/work/mesen/tree/**`
 - Riferimento name-entry: `SOM/work/mesen/tree/ref_name_{oam,vram,cgram}.bin`, `ref_name_layers_3410.txt`, `ref_name_3410.png`
 - Riferimento doppio Start: `SOM/work/mesen/tree/start_ref2/ref_{2800,3100,3400,3700}.png`

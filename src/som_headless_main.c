@@ -17,6 +17,10 @@
 #include "snes/snes.h"
 #include "snes/ppu.h"
 
+/* som_cheats.c asks which image it patches; the headless runner never
+ * applies the translation. */
+int SomLanguageItalian(void) { return 0; }
+
 static uint8_t *g_rom_data = NULL;
 static int g_rom_size = 0;
 static const char *g_rom_path = NULL;

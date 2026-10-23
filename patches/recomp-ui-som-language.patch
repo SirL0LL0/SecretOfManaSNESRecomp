@@ -1,0 +1,443 @@
+diff --git a/src/common/backends/imgui/launcher_imgui.cpp b/src/common/backends/imgui/launcher_imgui.cpp
+index e1a0bca..165573f 100644
+--- a/src/common/backends/imgui/launcher_imgui.cpp
++++ b/src/common/backends/imgui/launcher_imgui.cpp
+@@ -2242,7 +2242,7 @@ void draw_game_panel(LauncherModel* m, const LauncherTheme& th, bool fill_h = fa
+         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availw - w) * 0.5f);
+         state_mark(verified, th);
+         ImGui::SameLine(0, px(6));
+-        ImGui::TextColored(verified ? col(th.good) : col(th.warn), "%s", line);
++        ImGui::TextColored(verified ? col(th.good) : col(th.warn), "%s", ui_text(line));
+         // Say WHICH ROM this is and which one the build needs (with its
+         // SHA-256), instead of leaving the player at "not recognized".
+         if (m->rom_detail[0]) {
+@@ -2510,11 +2510,11 @@ void draw_save_row(LauncherModel* m, const LauncherTheme& th) {
+         }
+         ImGui::TextUnformatted(shown);
+     } else {
+-        ImGui::TextColored(col(th.text_muted), "no save yet");
++        ImGui::TextColored(col(th.text_muted), "%s", ui_text("no save yet"));
+     }
+     ImGui::SameLine(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - bw*2 - px(th.spacing_sm));
+     static const char* kSramPatterns[] = { "*.srm", "*.sav" };
+-    if (ImGui::Button("Import", ImVec2(bw, px(30)))) {
++    if (ImGui::Button(ui_text("Import"), ImVec2(bw, px(30)))) {
+         ui_pick_file(m, "Import SRAM save", {"*.srm", "*.sav"},
+                      "Battery save (.srm .sav)", [m](const char* path) {
+                          if (path)
+@@ -3732,9 +3732,9 @@ static void draw_aspect_row(LauncherModel* m, const LauncherTheme& th) {
+     float ctrl_w = px(180);
+     if (m->aspect_experimental)
+         ctrl_w += px(8) + ImGui::CalcTextSize("EXPERIMENTAL").x;
+-    row_label_right(m->aspect_setting_label && m->aspect_setting_label[0]
+-                        ? m->aspect_setting_label
+-                        : "Aspect ratio",
++    row_label_right(ui_text(m->aspect_setting_label && m->aspect_setting_label[0]
++                                ? m->aspect_setting_label
++                                : "Aspect ratio"),
+                     th, ctrl_w);
+     ImGui::PushID("aspect_ratio");
+     if (ImGui::Button(launcher_model_aspect_label(m), ImVec2(px(180), px(30))))
+@@ -4571,9 +4571,41 @@ void draw_audio_controls(LauncherModel* m, const LauncherTheme& th) {
+     if (m->num_languages > 0) {
+         ImGui::Dummy(ImVec2(0, px(6)));
+         eyebrow("LOCALIZATION");
++        // A language that needs a file (a translation patch the player
++        // supplies): the file row comes first, and the selector below skips
++        // that language until the file checks out.
++        //   Translation patch   ...file tail     [Browse]
++        if (m->language_file_label) {
++            const float bw = px(78);
++            ImGui::AlignTextToFramePadding();
++            ImGui::TextUnformatted(ui_text(m->language_file_label));
++            ImGui::SameLine(0, px(14));
++            float avail = ImGui::GetContentRegionAvail().x - bw - px(th.spacing_sm);
++            if (avail < px(50)) avail = px(50);
++            const char* file = m->s.language_file[0] ? m->s.language_file : ui_text("Not selected");
++            char elided[192]; elide_left(file, avail, elided, sizeof(elided));
++            ImGui::TextColored(col(th.text_muted), "%s", elided);
++            ImGui::SameLine(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - bw);
++            const std::string browse = std::string(ui_text("Browse")) + "##language_file";
++            if (ImGui::Button(browse.c_str(), ImVec2(bw, px(30)))) {
++                std::vector<std::string> patterns;
++                patterns.push_back(m->language_file_pattern ? m->language_file_pattern : "*");
++                ui_pick_file(m, ui_text("Select translation patch"), std::move(patterns),
++                             m->language_file_label, [m](const char* path) {
++                    if (path) launcher_model_set_language_file(m, path);
++                });
++            }
++        }
+         row_label_right("Language", th, px(SETTINGS_CTRL_W));
+         if (ImGui::Button(ui_text(launcher_model_language_label(m)), ImVec2(px(SETTINGS_CTRL_W), px(30))))
+             launcher_model_cycle_language(m);
++        char reason[192];
++        launcher_model_language_status(m, reason, sizeof(reason));
++        if (reason[0]) {
++            ImGui::PushTextWrapPos(0.0f);
++            ImGui::TextColored(col(th.text_muted), "%s", ui_text(reason));
++            ImGui::PopTextWrapPos();
++        }
+     }
+ }
+ 
+@@ -5014,7 +5046,7 @@ void panel_hotkeys_draw(LauncherModel* m, const LauncherTheme* th) {
+ // registry's available() gate.
+ void draw_settings(LauncherModel* m, const LauncherTheme& th) {
+     if (m->settings_saved_on_exit) {
+-        ImGui::TextDisabled("Changes are saved when you press Play or close the launcher.");
++        ImGui::TextDisabled("%s", ui_text("Changes are saved when you press Play or close the launcher."));
+         ImGui::Spacing();
+     }
+     // Row 1: DISPLAY | AUDIO share the top band. For the legacy minimal
+diff --git a/src/common/launcher_i18n.cpp b/src/common/launcher_i18n.cpp
+index 91a6c97..4e93f34 100644
+--- a/src/common/launcher_i18n.cpp
++++ b/src/common/launcher_i18n.cpp
+@@ -162,6 +162,19 @@ static const LauncherI18nEntry kItalian[] = {
+     {"Retail GBA BIOS required", "BIOS GBA retail richiesto"},
+     {"Use OpenBIOS", "Usa OpenBIOS"},
+     {"Clear", "Cancella"},
++    {"Import", "Importa"},
++    {"Display aspect", "Proporzioni schermo"},
++    {"Aspect ratio", "Proporzioni"},
++    {"Changes are saved when you press Play or close the launcher.",
++     "Le modifiche vengono salvate quando premi Gioca o chiudi il launcher."},
++    {"no save yet", "nessun salvataggio"},
++    {"ROM verified", "ROM verificata"},
++    {"ROM not verified", "ROM non verificata"},
++    {"Wrong ROM", "ROM errata"},
++    {"ROM not recognized", "ROM non riconosciuta"},
++    {"No ROM loaded", "Nessuna ROM caricata"},
++    {"Archive, not a ROM", "Archivio, non una ROM"},
++    {"ROM unreadable", "ROM illeggibile"},
+     {"Edit", "Modifica"},
+     {"Edit##cc", "Modifica##cc"},
+     {"Save", "Salva"},
+@@ -203,6 +216,67 @@ static const LauncherI18nEntry kItalian[] = {
+     {"FAST-FORWARD SPEED", "VELOCITA AVANZAMENTO"},
+     {"Enable ROM patch", "Abilita patch ROM"},
+     {"No patch selected", "Nessuna patch selezionata"},
++    /* Localization row (GameInfo.language_file_label and friends). */
++    {"LOCALIZATION", "LINGUA"},
++    {"Language", "Lingua"},
++    {"Translation patch", "Patch di traduzione"},
++    {"Select translation patch", "Seleziona la patch di traduzione"},
++    {"Not selected", "Non selezionato"},
++    /* In-game menu (recomp_runtime_settings.c / recomp_runtime_ui.c). */
++    {"Display", "Schermo"},
++    {"Audio", "Audio"},
++    {"System", "Sistema"},
++    {"Graphics", "Grafica"},
++    {"Fullscreen", "Schermo intero"},
++    {"Windowed", "In finestra"},
++    {"Borderless", "Senza bordi"},
++    {"Exclusive", "Esclusivo"},
++    {"Window scale", "Scala finestra"},
++    {"View mode", "Modalita vista"},
++    {"Native", "Nativa"},
++    {"16:9 fixed", "16:9 fisso"},
++    {"Edge HUD", "HUD ai bordi"},
++    {"Game dimming", "Oscuramento gioco"},
++    {"Menu opacity", "Opacita menu"},
++    {"Linear filter", "Filtro lineare"},
++    {"Volume", "Volume"},
++    {"Pause in menu", "Pausa nel menu"},
++    {"Save state", "Salva stato"},
++    {"Load state", "Carica stato"},
++    {"State slot", "Slot stato"},
++    {"Reset game", "Reset del gioco"},
++    {"Resume game", "Riprendi il gioco"},
++    {"Return to launcher", "Torna al launcher"},
++    {"Quit game", "Esci dal gioco"},
++    {"Choose windowed or fullscreen output.", "Scegli finestra o schermo intero."},
++    {"Resize the window in native-size steps.", "Ridimensiona la finestra a passi della risoluzione nativa."},
++    {"Native, fixed widescreen, or live window aspect.", "Nativa, widescreen fisso o proporzioni della finestra."},
++    {"Anchor status groups to widescreen edges.", "Ancora gli indicatori ai bordi del widescreen."},
++    {"How dark the game gets behind a menu.", "Quanto si scurisce il gioco dietro un menu."},
++    {"How solid the menus' backgrounds are.", "Quanto sono opachi gli sfondi dei menu."},
++    {"Smooth the final game image.", "Ammorbidisce l'immagine finale."},
++    {"Enable or mute game audio output.", "Attiva o silenzia l'audio del gioco."},
++    {"Set the in-game mixer volume.", "Imposta il volume del gioco."},
++    {"Hold the game while a menu is open.", "Ferma il gioco mentre un menu e aperto."},
++    {"Save the current state.", "Salva lo stato corrente."},
++    {"Load the current state slot.", "Carica lo slot di stato corrente."},
++    {"The slot Save state and Load state use.", "Lo slot usato da Salva stato e Carica stato."},
++    {"Reset the emulated machine.", "Riavvia la console emulata."},
++    {"Close settings and return to the game.", "Chiudi le impostazioni e torna al gioco."},
++    {"Close the game, open the launcher. Press twice.", "Chiude il gioco e apre il launcher. Premi due volte."},
++    {"Close the game. Press twice.", "Chiude il gioco. Premi due volte."},
++    {"Press again for the launcher", "Premi di nuovo per il launcher"},
++    {"Press again to quit", "Premi di nuovo per uscire"},
++    {"Press again to confirm", "Premi di nuovo per confermare"},
++    {"Press again to reset", "Premi di nuovo per il reset"},
++    {"UP/DOWN SELECT  LEFT/RIGHT CHANGE  ENTER ACCEPT",
++     "SU/GIU SCEGLI  SX/DX CAMBIA  INVIO CONFERMA"},
++    {"ENTER OPEN  ESC BACK", "INVIO APRI  ESC INDIETRO"},
++    {"Applied", "Applicato"},
++    {"Done", "Fatto"},
++    {"Saved", "Salvato"},
++    {"On", "Si"},
++    {"Off", "No"},
+ };
+ 
+ static const char* lookup(const LauncherI18nEntry* entries, int count,
+@@ -215,8 +289,26 @@ static const char* lookup(const LauncherI18nEntry* entries, int count,
+     return english;
+ }
+ 
++/* RECOMP_UI_LANGUAGE is the build's default; the host or the Localization
++ * row changes it at run time (recomp_launcher_set_ui_language). */
++static char s_language[16] = RECOMP_UI_LANGUAGE;
++
+ const char* launcher_i18n_language(void) {
+-    return RECOMP_UI_LANGUAGE;
++    return s_language;
++}
++
++void launcher_i18n_set_language(const char* code) {
++    if (!code || !code[0]) code = "en";
++    std::strncpy(s_language, code, sizeof(s_language) - 1);
++    s_language[sizeof(s_language) - 1] = '\0';
++}
++
++extern "C" void recomp_launcher_set_ui_language(const char* code) {
++    launcher_i18n_set_language(code);
++}
++
++extern "C" const char* recomp_launcher_ui_language(void) {
++    return s_language;
+ }
+ 
+ const char* launcher_i18n_text(const char* english) {
+diff --git a/src/common/launcher_i18n.h b/src/common/launcher_i18n.h
+index 4f8c2f1..f2ccc6f 100644
+--- a/src/common/launcher_i18n.h
++++ b/src/common/launcher_i18n.h
+@@ -1,4 +1,15 @@
+ #pragma once
+ 
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* The interface language ("en", "it"). RECOMP_UI_LANGUAGE is only the
++ * starting value: a host (or the Localization row) changes it at run time. */
+ const char* launcher_i18n_language(void);
++void launcher_i18n_set_language(const char* code);
+ const char* launcher_i18n_text(const char* english);
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/src/common/launcher_model.c b/src/common/launcher_model.c
+index eacae9a..497e76b 100644
+--- a/src/common/launcher_model.c
++++ b/src/common/launcher_model.c
+@@ -469,6 +469,11 @@ void launcher_model_init(LauncherModel* m,
+         if (m->num_discs == 0) m->discs = NULL;
+         m->language_labels      = game->language_labels;
+         m->num_languages        = game->num_languages;
++        m->language_file_label  = game->language_file_label;
++        m->language_file_pattern = game->language_file_pattern;
++        m->language_ui_codes    = game->language_ui_codes;
++        m->language_available_cb = game->language_available;
++        m->language_ctx         = game->language_ctx;
+         m->disc_verify_cb       = game->disc_verify;      // real disc verdict (PSX), or NULL
+         m->import_sbi_cb        = game->import_sbi;
+         m->memcard_inspect_cb   = game->memcard_inspect;  // real memcard summary (PSX), or NULL
+@@ -891,8 +896,14 @@ void launcher_model_init(LauncherModel* m,
+         // the safe default; a player who wants the latency picks Off.
+         m->s.vsync = RECOMP_LAUNCHER_VSYNC_ON;
+     }
+-    if (m->num_languages > 0)
++    if (m->num_languages > 0) {
+         m->s.language_index = clampi(m->s.language_index, 0, m->num_languages - 1);
++        /* A saved choice whose file has gone (moved, deleted) falls back to
++         * the first language rather than failing at PLAY. */
++        if (!launcher_model_language_available(m, m->s.language_index, NULL, 0))
++            m->s.language_index = 0;
++        launcher_model_apply_ui_language(m);
++    }
+     if (m->has_deadzone_pct) {
+         m->s.deadzone[0] = clampi((m->s.deadzone[0] / 5) * 5, 0, 50);
+         m->s.deadzone[1] = m->s.deadzone[0];
+@@ -2572,9 +2583,49 @@ void launcher_model_toggle_fullscreen(LauncherModel* m) {
+     m->s.fullscreen = m->s.fullscreen ? 0 : 1;
+ }
+ 
++int launcher_model_language_available(const LauncherModel* m, int index,
++                                      char* reason, size_t reason_size) {
++    if (reason && reason_size) reason[0] = '\0';
++    if (index <= 0 || !m->language_available_cb) return 1;
++    return m->language_available_cb(m->language_ctx, index, m->s.language_file,
++                                    reason, reason_size) != 0;
++}
++
++void launcher_model_apply_ui_language(const LauncherModel* m) {
++    if (m->num_languages <= 0 || !m->language_ui_codes) return;
++    int idx = clampi(m->s.language_index, 0, m->num_languages - 1);
++    if (m->language_ui_codes[idx]) recomp_launcher_set_ui_language(m->language_ui_codes[idx]);
++}
++
+ void launcher_model_cycle_language(LauncherModel* m) {
+     if (m->num_languages <= 0) return;
+-    m->s.language_index = (m->s.language_index + 1) % m->num_languages;
++    /* Skip the entries the player cannot use yet (a translation whose patch
++     * is missing); the first language is always there. */
++    int idx = m->s.language_index;
++    for (int step = 0; step < m->num_languages; ++step) {
++        idx = (idx + 1) % m->num_languages;
++        if (launcher_model_language_available(m, idx, NULL, 0)) break;
++    }
++    m->s.language_index = idx;
++    launcher_model_apply_ui_language(m);
++}
++
++void launcher_model_set_language_file(LauncherModel* m, const char* path) {
++    safe_copy(m->s.language_file, sizeof(m->s.language_file), path ? path : "");
++    if (!launcher_model_language_available(m, m->s.language_index, NULL, 0)) {
++        m->s.language_index = 0;
++        launcher_model_apply_ui_language(m);
++    }
++}
++
++/* Why the next language is not selectable, for the row under the selector;
++ * empty when every language is available. */
++void launcher_model_language_status(const LauncherModel* m, char* out, size_t out_size) {
++    if (!out || !out_size) return;
++    out[0] = '\0';
++    for (int i = 1; i < m->num_languages; ++i)
++        if (launcher_model_language_available(m, i, out, out_size) == 0 && out[0]) return;
++    out[0] = '\0';
+ }
+ 
+ const char* launcher_model_language_label(const LauncherModel* m) {
+diff --git a/src/common/launcher_model.h b/src/common/launcher_model.h
+index 1e065a4..12df38a 100644
+--- a/src/common/launcher_model.h
++++ b/src/common/launcher_model.h
+@@ -506,6 +506,13 @@ typedef struct {
+     const char* rom_noun;             // "ROM" default; e.g. "Disc" for PSX
+     const char* const* language_labels;  // borrowed; NULL/num_languages==0 => no Localization menu
+     int      num_languages;
++    // Languages that need a player-supplied file (see RecompLauncherCGameInfo).
++    const char*        language_file_label;
++    const char*        language_file_pattern;
++    const char* const* language_ui_codes;
++    int (*language_available_cb)(void* ctx, int index, const char* file,
++                                 char* reason, size_t reason_size);
++    void*              language_ctx;
+ 
+     // ---- inferred SystemProfile (launcher_system.h) ----
+     // Derived once in launcher_model_init() from the ABI GameInfo's `platform`
+@@ -1015,7 +1022,12 @@ void launcher_model_cycle_fullscreen(LauncherModel* m);        // Off -> Borderl
+ const char* launcher_model_fullscreen_label(const LauncherModel* m);  // "Off"/"Borderless"/"Exclusive"
+ void launcher_model_set_fullscreen(LauncherModel* m, int mode);  // 0/1/2, clamped
+ void launcher_model_toggle_fullscreen(LauncherModel* m);       // binary on/off; kept for bool-style hosts
+-void launcher_model_cycle_language(LauncherModel* m);          // wraps over num_languages
++void launcher_model_cycle_language(LauncherModel* m);          // wraps over the available languages
++int  launcher_model_language_available(const LauncherModel* m, int index,
++                                       char* reason, size_t reason_size);
++void launcher_model_apply_ui_language(const LauncherModel* m); // interface follows the chosen language
++void launcher_model_set_language_file(LauncherModel* m, const char* path);
++void launcher_model_language_status(const LauncherModel* m, char* out, size_t out_size);
+ const char* launcher_model_language_label(const LauncherModel* m);
+ void launcher_model_cycle_deadzone_pct(LauncherModel* m);      // 0..50 step 5, wraps; mirrors both players
+ const char* launcher_model_deadzone_pct_label(const LauncherModel* m);  // "37%"
+diff --git a/src/common/recomp_runtime_ui.c b/src/common/recomp_runtime_ui.c
+index 809061c..7872c69 100644
+--- a/src/common/recomp_runtime_ui.c
++++ b/src/common/recomp_runtime_ui.c
+@@ -1,5 +1,6 @@
+ #include "recomp_runtime_ui_internal.h"
+ #include "launcher_theme.h"
++#include "launcher_i18n.h"
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -39,7 +40,8 @@ const RecompRuntimeUiItem *recomp_runtime_ui_section_item(
+ 
+ /* Every status write withdraws a pending confirmation: its prompt is gone. */
+ static void show_status(RecompRuntimeUi *ui, const char *text, unsigned frames) {
+-    snprintf(ui->status, sizeof(ui->status), "%s", text);
++    /* Stored translated: the footer right-aligns it by its width. */
++    snprintf(ui->status, sizeof(ui->status), "%s", launcher_i18n_text(text ? text : ""));
+     ui->status_frames = ui->status[0] ? frames : 0;
+     ui->status_frame_fraction = 0.0f;
+     ui->confirm_item = NULL;
+@@ -632,6 +634,9 @@ static void draw_text(void *pixels, int width, int height, int pitch, int x,
+                       int y, int scale, uint32_t color, const char *text,
+                       int max_x) {
+     if (!text) return;
++    /* Labels, section names, help and titles are English keys; draw them in
++     * the interface language. A string that is not a key draws as is. */
++    text = launcher_i18n_text(text);
+     int cursor = x;
+     for (const unsigned char *p = (const unsigned char *)text; *p; ++p) {
+         if (*p >= 0x80) continue;
+@@ -666,7 +671,8 @@ static void item_value(RecompRuntimeUi *ui, const RecompRuntimeUiItem *item,
+     if (!recomp_runtime_ui_current_value(ui, item, &value)) {
+         snprintf(out, out_size, "?");
+     } else if (item->type == RECOMP_RUNTIME_UI_BOOL) {
+-        snprintf(out, out_size, "%s", value ? "On" : "Off");
++        /* Translated here, not when drawn: the width is measured from it. */
++        snprintf(out, out_size, "%s", launcher_i18n_text(value ? "On" : "Off"));
+     } else if (item->type == RECOMP_RUNTIME_UI_CHOICE && item->choices) {
+         size_t index = item->choice_count;
+         if (item->choice_values) {
+@@ -677,7 +683,7 @@ static void item_value(RecompRuntimeUi *ui, const RecompRuntimeUiItem *item,
+             index = (size_t)(value - item->minimum);
+         }
+         if (index < item->choice_count)
+-            snprintf(out, out_size, "%s", item->choices[index]);
++            snprintf(out, out_size, "%s", launcher_i18n_text(item->choices[index]));
+         else
+             snprintf(out, out_size, "?");
+     } else {
+diff --git a/src/recomp_launcher.h b/src/recomp_launcher.h
+index b0bfa74..1ca98a6 100644
+--- a/src/recomp_launcher.h
++++ b/src/recomp_launcher.h
+@@ -1573,8 +1573,19 @@ struct RecompLauncherCSettings {
+      * additively; a zero-initialized host reads as unset. */
+     int  quality_preset;
+     int  quality_base;
++    /* The file a language needs (GameInfo.language_file_label), e.g. a
++     * translation patch the player supplies. Empty = none chosen. Appended
++     * additively; a zero-initialized host reads as none. */
++    char language_file[512];
+ };
+ #define RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS 1
++#define RECOMP_LAUNCHER_HAS_LANGUAGE_FILE 1
++
++/* The interface language of the launcher and the in-game menu ("en", "it").
++ * The Localization row sets it from GameInfo.language_ui_codes; a host calls
++ * this at startup with the saved choice, before any UI is drawn. */
++void recomp_launcher_set_ui_language(const char* code);
++const char* recomp_launcher_ui_language(void);
+ 
+ /* Largest run-ahead depth the launcher will offer for
+  * RecompLauncherCSettings.run_ahead. Deeper than this and the cost (one full
+@@ -2414,6 +2425,22 @@ typedef struct RecompLauncherCGameInfo {
+     int (*rom_describe)(void* ctx, const uint8_t* image, size_t len,
+                         char* out, size_t out_size);
+     void*              rom_describe_ctx;
++
++    /* ---- Languages that need a player-supplied file (a translation patch) --
++     * language_file_label: the Localization row's file label ("Translation
++     * patch"); NULL = no file row. language_file_pattern: the picker filter
++     * ("*.ips"). language_ui_codes: the interface language each entry of
++     * language_labels switches the launcher and in-game menu to ("en", "it");
++     * NULL = the interface stays as it is. language_available: may entry
++     * `index` be chosen with `file` (the settings' language_file)? Return 0
++     * and fill `reason` when not; NULL = every entry is available. Entry 0 is
++     * always available. Appended for ABI stability. */
++    const char*        language_file_label;
++    const char*        language_file_pattern;
++    const char* const* language_ui_codes;
++    int (*language_available)(void* ctx, int index, const char* file,
++                              char* reason, size_t reason_size);
++    void*              language_ctx;
+ } RecompLauncherCGameInfo;
+ 
+ /* RecompLauncherCGameInfo carries texture_filter_labels / _values. */

@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include "rom_identity.h"
+
 #ifdef __cplusplus
 #include <filesystem>
 #include <string>
@@ -68,6 +70,12 @@ struct RecompLauncherCModProvider;
 int snes_mod_runtime_initialize_c(const char* root,
                                   const char* game_id,
                                   const char* rom_sha256);
+/* The port's catalog of known dumps (borrowed; must outlive the runtime). A
+ * file picked for a resource with normalized_sha256 that does not match is
+ * then named ("Wrong ROM: this is Mega Man X3 (Japan). Select Mega Man X3
+ * (USA) (SHA-256 ...).") rather than reported only as wrong. */
+void snes_mod_runtime_set_rom_catalog_c(const SnesRomRevision* catalog,
+                                        int count);
 /* Same, with the other dumps the title accepts (a base ROM a language pack
  * turns into the image the code was generated from). */
 int snes_mod_runtime_initialize_multi_c(const char* root,

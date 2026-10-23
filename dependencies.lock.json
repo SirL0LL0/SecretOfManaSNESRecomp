@@ -1,14 +1,16 @@
 {
-  "schema": 1,
+  "schema": 2,
   "dependencies": {
     "snesrecomp": {
       "repository": "https://github.com/SirL0LL0/snesrecomp.git",
-      "revision": "f68aa0fe8edae75cbc7d4b9473c71687b45ce702",
+      "branch": "som-upstream-2026-10-23",
+      "revision": "e2c4d2b90e6356427f1a9b879b40f6ebbd20dd1d",
+      "based_on": "https://github.com/mstan/snesrecomp.git 86c80cb",
       "path_from_workspace": "../snesrecomp"
     },
     "recomp-ui": {
       "repository": "https://github.com/mstan/recomp-ui.git",
-      "revision": "11e0aa6c8466f177a12bea7ead1f86e7c140d325",
+      "revision": "7c635c6b366a6e0d5d3c913a7fce6ec04dd9f256",
       "path_from_workspace": "../snesrecomp/recomp-ui"
     }
   },
@@ -19,17 +21,16 @@
     "sdl3_version": "3.4.10",
     "sdl3_sha256": "12b34280415ec8418c864408b93d008a20a6530687ee613d60bfbd20411f2785"
   },
-  "framework_patch": {
-    "file": "patches/snesrecomp-som-intro-timing.patch",
-    "sha256": "55c7962bda161697f4bb3205abe320e3510a4c261b550be4df0674273dd9a719",
-    "applies_to": "dependencies.snesrecomp.revision",
+  "ui_patch": {
+    "file": "patches/recomp-ui-som-language.patch",
+    "sha256": "a76ab3a6cf8ae01463a5681b2923f452af4df4f02fad0fb81cd586b9965cb831",
+    "applies_to": "dependencies.recomp-ui.revision",
+    "marker": "recomp_launcher_set_ui_language",
     "contains": [
-      "som-irq-task-switch",
-      "mode5-renderer-fallback",
-      "mode5-logical-output",
-      "intro-raster-journal",
-      "multi-rom-identity",
-      "resizeable-rom-patch"
+      "launcher-language-selector",
+      "launcher-translation-file",
+      "runtime-ui-language-switch",
+      "italian-ui-strings"
     ]
   }
 }

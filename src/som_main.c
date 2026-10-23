@@ -95,56 +95,167 @@ static void SomConfigureCoverageDirectory(void) {
 #endif
 }
 
-/* Mods page → Music → Restore Unused Fanfares (mods/preloaded/packages/
- * som.restore-unused-fanfares). The package carries the IPS and the digest
- * of the patched image; it is applied here, in memory, only when the feature
- * is enabled in the committed plan. A patch that does not reproduce the
- * declared image refuses the launch rather than run a half-patched ROM. */
-#define SOM_FANFARES_PACKAGE "som.restore-unused-fanfares"
-#define SOM_FANFARES_FEATURE "restore"
-#define SOM_FANFARES_IPS     "restore-unused-fanfares-it.ips"
-static const char kSomFanfaresSha256[] =
-    "96b0d01ea873595bc5343a0cb7786c9abfe53febb2e1b495b34d7cc84eb9ce40";
+/* ── Language ──────────────────────────────────────────────────────────────
+ *
+ * The player brings the original US ROM: that is the game, in English, and
+ * the code in this executable was generated from it. Settings -> Localization
+ * offers Italiano once the player has chosen the Mumble Translation patch
+ * (v2.01, "Secret of Mana (USA).ips", from mumble.romhacking.it/som.html; it
+ * is not distributed here). The patch is applied to the ROM in memory before
+ * SnesInit and the result must hash as the translated image; the file on
+ * disk is never touched.
+ *
+ * One program serves both images: the translation changes 10 bytes of the
+ * recompiled code, the text pointers of C0:5989-5BB9 (LDX #ptr / JSR $5C2A),
+ * and config/bankc0.cfg declares them live_operand, so compiled code reads
+ * them from whichever image is loaded. */
+static const char kSomUsRomSha256[] =
+    "4c15013131351e694e05f22e38bb1b3e4031dedac77ec75abecebe8520d82d5f";
+/* The US ROM with the v2.01 patch applied. */
+static const char kSomItalianImageSha256[] =
+    "0a8019cada89a39dda3320b99bcee6e65a7ca3149818e3e860dd6d197a8bf1bf";
+/* "Secret of Mana (USA).ips" and "Secret of Mana (Europe) (Rev 1).ips" from
+ * itptch_snes_secret-of-mana_v201-rev2.zip. */
+static const char kSomItalianPatchSha256[] =
+    "e5207bc3d79f12ba5d381ac905532736a5fb3ba3759bf1feeeb70e6ea0d13928";
+static const char kSomEuropePatchSha256[] =
+    "681b42b57aa743b768728f2a8035a567b57ba858f117e8c12083567d0fa3bc84";
 
-static int SomApplyFanfares(uint8_t *rom, size_t size, char *error, size_t error_cap) {
-#if SNESRECOMP_ENABLE_MODS
-    if (!snes_mod_runtime_feature_enabled_c(SOM_FANFARES_PACKAGE, SOM_FANFARES_FEATURE))
-        return 1;
-    char root[1024], path[1200];
-    if (!snes_mod_runtime_package_root_c(SOM_FANFARES_PACKAGE, NULL, root, sizeof(root)) ||
-        snprintf(path, sizeof(path), "%s/%s", root, SOM_FANFARES_IPS) >= (int)sizeof(path)) {
-        snprintf(error, error_cap, "Restore Unused Fanfares: package folder not found");
+enum { kSomLanguageEnglish = 0, kSomLanguageItalian = 1 };
+static const char *const kSomLanguageLabels[] = {"English", "Italiano"};
+static const char *const kSomLanguageUiCodes[] = {"en", "it"};
+
+static int s_som_italian;   /* the loaded image is the Italian one */
+
+int SomLanguageItalian(void) { return s_som_italian; }
+
+static void HexDigest(const uint8_t *data, size_t size, char hex[65]) {
+    uint8_t digest[32];
+    sha256_compute(data, size, digest);
+    for (unsigned i = 0; i < 32; ++i) snprintf(hex + 2 * i, 3, "%02x", digest[i]);
+}
+
+static uint8_t *SomReadFile(const char *path, size_t *size) {
+    FILE *f = path && path[0] ? fopen(path, "rb") : NULL;
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t *data = n > 0 && n < 16 * 1024 * 1024 ? (uint8_t *)malloc((size_t)n) : NULL;
+    if (data && fread(data, 1, (size_t)n, f) != (size_t)n) { free(data); data = NULL; }
+    fclose(f);
+    if (data) *size = (size_t)n;
+    return data;
+}
+
+/* The launcher asks every frame: remember the last file's verdict. */
+static int SomLanguageAvailable(int index, const char *file, char *reason, size_t reason_cap) {
+    static char cached_path[512];
+    static long long cached_size = -1;
+    static int cached_ok;
+    static char cached_reason[160];
+    if (index != kSomLanguageItalian) return 1;
+    if (!file || !file[0]) {
+        if (reason && reason_cap)
+            snprintf(reason, reason_cap,
+                     "Italiano needs the Mumble Translation patch v2.01 for the US ROM "
+                     "(mumble.romhacking.it/som.html): choose \"Secret of Mana (USA).ips\".");
         return 0;
     }
-    FILE *f = fopen(path, "rb");
-    uint8_t ips[256];
-    size_t ips_size = f ? fread(ips, 1, sizeof(ips), f) : 0;
-    if (f) fclose(f);
+    FILE *f = fopen(file, "rb");
+    long long size = -1;
+    if (f) { fseek(f, 0, SEEK_END); size = ftell(f); fclose(f); }
+    if (strcmp(cached_path, file) != 0 || cached_size != size) {
+        snprintf(cached_path, sizeof(cached_path), "%s", file);
+        cached_size = size;
+        size_t n = 0;
+        uint8_t *data = SomReadFile(file, &n);
+        char hex[65] = "";
+        if (data) HexDigest(data, n, hex);
+        free(data);
+        cached_ok = data && strcmp(hex, kSomItalianPatchSha256) == 0;
+        if (cached_ok) cached_reason[0] = '\0';
+        else if (!data)
+            snprintf(cached_reason, sizeof(cached_reason), "The translation patch cannot be read.");
+        else if (strcmp(hex, kSomEuropePatchSha256) == 0)
+            snprintf(cached_reason, sizeof(cached_reason),
+                     "This is the patch for the European release: choose \"Secret of Mana (USA).ips\".");
+        else
+            snprintf(cached_reason, sizeof(cached_reason),
+                     "Not the Mumble Translation patch v2.01 for Secret of Mana (USA).");
+    }
+    if (!cached_ok && reason && reason_cap) snprintf(reason, reason_cap, "%s", cached_reason);
+    return cached_ok;
+}
+
+/* Before SnesInit: Italiano applies the player's patch to the US ROM. */
+static int SomApplyLanguage(uint8_t **rom, size_t *size, char *error, size_t error_cap) {
+    s_som_italian = 0;
+    if (snesrecomp_desktop_language() != kSomLanguageItalian) return 1;
+    const char *path = snesrecomp_desktop_language_file();
+    char reason[160] = "";
+    if (!SomLanguageAvailable(kSomLanguageItalian, path, reason, sizeof(reason))) {
+        snprintf(error, error_cap, "Italiano: %s", reason);
+        return 0;
+    }
+    size_t ips_size = 0;
+    uint8_t *ips = SomReadFile(path, &ips_size);
+    if (!ips) {
+        snprintf(error, error_cap, "Italiano: cannot read %s", path);
+        return 0;
+    }
     uint8_t *patched = NULL;
     size_t patched_size = 0;
-    RomPatchStatus status = ips_size
-        ? snes_rom_patch_apply(rom, size, ips, ips_size, size, &patched, &patched_size)
-        : kRomPatch_Invalid;
-    if (status != kRomPatch_Ok || patched_size != size) {
+    RomPatchStatus status = snes_rom_patch_apply(*rom, *size, ips, ips_size,
+                                                 16u * 1024u * 1024u, &patched, &patched_size);
+    free(ips);
+    char hex[65] = "";
+    if (status == kRomPatch_Ok && patched) HexDigest(patched, patched_size, hex);
+    if (status != kRomPatch_Ok || strcmp(hex, kSomItalianImageSha256) != 0) {
         free(patched);
-        snprintf(error, error_cap, "Restore Unused Fanfares: %s (%s)",
-                 ips_size ? snes_rom_patch_status_text(status) : "cannot read the patch", path);
+        snprintf(error, error_cap, "Italiano: the patched ROM is not the expected image (%s)",
+                 status != kRomPatch_Ok ? snes_rom_patch_status_text(status) : hex);
         return 0;
     }
-    uint8_t digest[32];
-    char hex[65];
-    sha256_compute(patched, patched_size, digest);
-    for (unsigned i = 0; i < 32; ++i) snprintf(hex + 2 * i, 3, "%02x", digest[i]);
-    if (strcmp(hex, kSomFanfaresSha256) != 0) {
-        free(patched);
-        snprintf(error, error_cap, "Restore Unused Fanfares: patched ROM digest %s does not match", hex);
-        return 0;
+    *rom = patched;
+    *size = patched_size;
+    s_som_italian = 1;
+    fprintf(stderr, "som: Italian translation (Mumble v2.01) applied in memory\n");
+    return 1;
+}
+
+/* Mods page → Music → Restore Unused Fanfares (som.restore-unused-fanfares):
+ * Kethinov's patch 1.2, three records, at their offsets in each image. Every
+ * byte is checked before it changes, so a ROM that is not the expected one is
+ * left alone rather than half-patched. */
+typedef struct SomRomEdit { uint32_t us, it; uint8_t len; uint8_t from[6], to[6]; } SomRomEdit;
+static const SomRomEdit kSomFanfares[] = {
+    {0x09B923, 0x09A6CA, 1, {0x2F}, {0x30}},                     /* Sea Hare's Tail */
+    {0x09CA6E, 0x09B6DF, 2, {0x27, 0xC0}, {0x24, 0x01}},         /* Moogle Belt */
+    {0x0A0E44, 0x0A0DE2, 6, {0, 0, 0, 0, 0, 0}, {0x40, 0x01, 0x21, 0x0A, 0xFF, 0x02}},
+};
+
+static int SomApplyFanfares(uint8_t *rom, size_t size, char *error, size_t error_cap) {
+    (void)error; (void)error_cap;
+#if SNESRECOMP_ENABLE_MODS
+    if (!snes_mod_runtime_feature_enabled_c("som.restore-unused-fanfares", "restore"))
+        return 1;
+    const size_t n = sizeof(kSomFanfares) / sizeof(kSomFanfares[0]);
+    for (size_t i = 0; i < n; ++i) {
+        const SomRomEdit *e = &kSomFanfares[i];
+        const uint32_t at = s_som_italian ? e->it : e->us;
+        if (at + e->len > size || memcmp(rom + at, e->from, e->len) != 0) {
+            fprintf(stderr, "som: Restore Unused Fanfares: unexpected bytes at %06X, skipped\n", at);
+            return 1;
+        }
     }
-    memcpy(rom, patched, size);
-    free(patched);
+    for (size_t i = 0; i < n; ++i) {
+        const SomRomEdit *e = &kSomFanfares[i];
+        memcpy(rom + (s_som_italian ? e->it : e->us), e->to, e->len);
+    }
     fprintf(stderr, "som: Restore Unused Fanfares applied in memory\n");
 #else
-    (void)rom; (void)size; (void)error; (void)error_cap;
+    (void)rom; (void)size;
 #endif
     return 1;
 }
@@ -156,122 +267,6 @@ static int SomPrepareRom(uint8_t *rom, size_t size, char *error, size_t error_ca
     return
            SomCheatsPatchRom(rom, size, error, error_cap) &&
            SomMsu1PatchPrepare(error, error_cap);
-}
-
-/* ── The language pack ────────────────────────────────────────────────────
- *
- * Mods -> Language -> Italiano. The player brings the translation patch (it
- * is not distributed here) and the original English ROM; the pack applies
- * the patch in memory, before SnesInit, and only if the result hashes as the
- * image this executable was generated from (the Mumble Translation v2.0 ROM).
- * The file on disk is never touched.
- *
- * The translation is 99.9% data: of the 124545 bytes it changes in the
- * 2 MB it shares with the US release, 117 fall inside recompiled code, and
- * those are the text pointers and the place the decompressor was moved to.
- * The pointers are already the translation's (the code was generated from
- * the translated ROM), so the image the patch produces is the one the code
- * expects -- which is why the check below can be exact: the patched image
- * must hash to the identity the code was built from.
- *
- * English -> Italian is the whole scope: the code in this executable is the
- * translation's, so the English release is the base the patch starts from,
- * not a language the player can pick. A Japanese or otherwise different
- * release is a different game and would need its own build. */
-#define SOM_LANGUAGE_PACKAGE "som.language"
-#define SOM_LANGUAGE_FEATURE "italian"
-#define SOM_LANGUAGE_RESOURCE "patch"
-
-/* The image the code was generated from: the Italian translation. The
- * patched base ROM has to hash to this, or the launch is refused. */
-static const char kSomItalianRomSha256[] =
-    "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275";
-
-/* The original US release the patch applies to. */
-static const char kSomUsRomSha256[] =
-    "4c15013131351e694e05f22e38bb1b3e4031dedac77ec75abecebe8520d82d5f";
-
-static int SomApplyLanguagePack(uint8_t **rom, size_t *size, char *error,
-                                 size_t error_cap) {
-#if SNESRECOMP_ENABLE_MODS
-    if (!snes_mod_runtime_feature_enabled_c(SOM_LANGUAGE_PACKAGE, SOM_LANGUAGE_FEATURE))
-        return 1;
-    /* The player may already own the translated ROM: then the patch has
-     * nothing to do, and running it would only corrupt the image. */
-    uint8 digest[32];
-    char hex[65];
-    sha256_compute(*rom, *size, digest);
-    for (unsigned i = 0; i < 32; ++i) snprintf(hex + 2 * i, 3, "%02x", digest[i]);
-    if (strcmp(hex, kSomItalianRomSha256) == 0) {
-        fprintf(stderr, "som: the ROM is already the Italian one\n");
-        return 1;
-    }
-    /* The patch comes from the player: the Mods page has the file chooser
-     * for it, and the path it holds is the one to apply. */
-    char path[1200];
-    if (!snes_mod_runtime_resource_path_c(SOM_LANGUAGE_PACKAGE, SOM_LANGUAGE_FEATURE,
-                                          SOM_LANGUAGE_RESOURCE, path, sizeof(path)) ||
-        !path[0]) {
-        snprintf(error, error_cap,
-                 "Language: choose the translation patch on the Mods page");
-        return 0;
-    }
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        snprintf(error, error_cap, "Language: cannot read %s", path);
-        return 0;
-    }
-    fseek(f, 0, SEEK_END);
-    long ips_size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    uint8 *ips = ips_size > 0 ? (uint8 *)malloc((size_t)ips_size) : NULL;
-    if (!ips) {
-        fclose(f);
-        snprintf(error, error_cap, "Language: out of memory");
-        return 0;
-    }
-    size_t got = fread(ips, 1, (size_t)ips_size, f);
-    fclose(f);
-    if (got != (size_t)ips_size) {
-        free(ips);
-        snprintf(error, error_cap, "Language: short read on %s", path);
-        return 0;
-    }
-    /* The translation adds a megabyte of banks, so the result is larger
-     * than the base: the applier grows the image, and the cap is the
-     * ceiling the result may reach. */
-    uint8 *patched = NULL;
-    size_t patched_size = 0;
-    const size_t base_size = *size;
-    RomPatchStatus status = snes_rom_patch_apply(*rom, *size, ips, (size_t)ips_size,
-                                                 16u * 1024u * 1024u,
-                                                 &patched, &patched_size);
-    free(ips);
-    if (status != kRomPatch_Ok || !patched) {
-        free(patched);
-        snprintf(error, error_cap, "Language: %s", snes_rom_patch_status_text(status));
-        return 0;
-    }
-    uint8 pdigest[32];
-    char phex[65];
-    sha256_compute(patched, patched_size, pdigest);
-    for (unsigned i = 0; i < 32; ++i) snprintf(phex + 2 * i, 3, "%02x", pdigest[i]);
-    if (strcmp(phex, kSomItalianRomSha256) != 0) {
-        free(patched);
-        snprintf(error, error_cap,
-                 "Language: patched ROM digest %s is not the image this build was made from",
-                 phex);
-        return 0;
-    }
-    *rom = patched;
-    *size = patched_size;
-    fprintf(stderr, "som: Italian translation applied in memory (%u -> %u bytes)\n",
-            (unsigned)base_size, (unsigned)patched_size);
-    return 1;
-#else
-    (void)rom; (void)size; (void)error; (void)error_cap;
-    return 1;
-#endif
 }
 
 int main(int argc, char **argv) {
@@ -286,12 +281,10 @@ int main(int argc, char **argv) {
     game.launcher_title = NULL;               /* "<name> — Launcher" */
     game.region = "USA";
     game.rom_file = NULL;
-    game.expected_sha256_hex =
-        "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275";
-    /* The base ROM the language pack starts from: the launcher has to let
-     * the player pick it, or the pack is never offered. */
-    game.known_sha256_hex = (const char *const[]){kSomUsRomSha256};
-    game.num_known_sha256 = 1;
+    /* The original US release: the code was generated from it. */
+    game.expected_sha256_hex = kSomUsRomSha256;
+    game.known_sha256_hex = NULL;
+    game.num_known_sha256 = 0;
     game.expected_crc32_hex = NULL;
     game.game_id = "secret-of-mana";          /* enables the launcher's diagnostic capture toggle */
     game.build_version = "dev";
@@ -316,8 +309,8 @@ int main(int argc, char **argv) {
     game.mods_provider = NULL;
     game.after_config = SomMusicInitialize;   /* read msu1.cfg before launch */
     game.on_rom_loaded = NULL;
-    game.patch_rom = SomPrepareRom;           /* mods: fanfares IPS, MSU-1 pack */
-    game.patch_rom_ex = SomApplyLanguagePack; /* mods: Language -> Italiano */
+    game.patch_rom = SomPrepareRom;           /* mods: fanfares, cheats, MSU-1 pack */
+    game.patch_rom_ex = SomApplyLanguage;     /* Settings -> Localization -> Italiano */
     game.on_reset = SomMsu1PatchTimelineJumped; /* MSU-1 track after a state load */
     game.before_run_frame = NULL;
     game.after_run_frame = NULL;
@@ -339,6 +332,14 @@ int main(int argc, char **argv) {
     game.rewind_settings = 1;
     game.in_game_launcher = 1;
     game.in_game_menu = 1;                    /* Escape / Select+Start */
+    /* Settings -> Localization: English, or Italiano with the player's
+     * translation patch; the launcher and in-game menu follow the choice. */
+    game.language_labels = kSomLanguageLabels;
+    game.language_ui_codes = kSomLanguageUiCodes;
+    game.num_languages = 2;
+    game.language_file_label = "Translation patch";
+    game.language_file_pattern = "*.ips";
+    game.language_available = SomLanguageAvailable;
     game.configure_launcher = NULL;
     game.prepare_netplay = NULL;
     game.netplay_ready = NULL;

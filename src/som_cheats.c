@@ -40,6 +40,7 @@
 typedef struct SomPoke {
     uint32_t addr;   /* WRAM offset ($7E0000-based), or ROM file offset */
     uint8_t value;
+    uint32_t it;     /* ROM offset in the Italian image when it moved (0 = same) */
 } SomPoke;
 
 /* WRAM a game uses for something else until a game is running: see
@@ -137,19 +138,19 @@ static const SomCheat kCheats[] = {
     {"free_starter_gear", kKindRom, kGuardNone, 5,
      {{0x18FBE0, 0x00}, {0x18FBB6, 0x00}, {0x18FBB8, 0x00}, {0x18FBBA, 0x00},
       {0x18FC30, 0x00}}},
-    /* Game Genie DDAB-E715 (US C9:CF9D): the inn price operand 30 in the
-     * event script, at 09BBB2 in the translation. */
-    {"neko_inn_free", kKindRom, kGuardNone, 1, {{0x09BBB2, 0x00}}},
+    /* Game Genie DDAB-E715 (C9:CF9D): the inn price operand 30 in the event
+     * script, at 09BBBF in the translation (Mumble v2.01). */
+    {"neko_inn_free", kKindRom, kGuardNone, 1, {{0x09CF9D, 0x00, 0x09BBBF}}},
     /* Game Genie 9C06-81AD 9C06-85DD 9C06-850D 9C06-856D 9C06-85AD: the
      * level-16 row of the stat table at D0:428B */
     {"level16_stats", kKindRom, kGuardNone, 5,
      {{0x10428B, 0x5A}, {0x10428C, 0x5A}, {0x10428D, 0x5A}, {0x10428E, 0x5A},
       {0x10428F, 0x5A}}},
-    /* Game Genie EE6B-8738 = PAR CA8E9FFF (US 0A8E9F): the chest's gold
-     * operand, at 0A85F1 in the translation. */
-    {"elder_chest_gold", kKindRom, kGuardNone, 1, {{0x0A85F1, 0xFF}}},
-    /* PAR CA8EAFFE (US 0A8EAF), at 0A8601 in the translation */
-    {"elder_chest_repeat", kKindRom, kGuardNone, 1, {{0x0A8601, 0xFE}}},
+    /* Game Genie EE6B-8738 = PAR CA8E9FFF (0A8E9F): the chest's gold
+     * operand, at 0A85E1 in the translation. */
+    {"elder_chest_gold", kKindRom, kGuardNone, 1, {{0x0A8E9F, 0xFF, 0x0A85E1}}},
+    /* PAR CA8EAFFE (0A8EAF), at 0A85F1 in the translation */
+    {"elder_chest_repeat", kKindRom, kGuardNone, 1, {{0x0A8EAF, 0xFE, 0x0A85F1}}},
 };
 
 enum { kCheatCount = sizeof(kCheats) / sizeof(kCheats[0]) };
@@ -222,11 +223,14 @@ void SomCheatsRegister(void) {
 
 int SomCheatsPatchRom(uint8_t *rom, size_t size, char *error, size_t error_cap) {
     (void)error; (void)error_cap;
+    int italian = SomLanguageItalian();
     for (size_t i = 0; i < kCheatCount; ++i) {
         if (kCheats[i].kind != kKindRom || !OptionOn(kCheats[i].option)) continue;
-        for (size_t k = 0; k < kCheats[i].count; ++k)
-            if (kCheats[i].pokes[k].addr < size)
-                rom[kCheats[i].pokes[k].addr] = kCheats[i].pokes[k].value;
+        for (size_t k = 0; k < kCheats[i].count; ++k) {
+            const SomPoke *p = &kCheats[i].pokes[k];
+            uint32_t addr = (italian && p->it) ? p->it : p->addr;
+            if (addr < size) rom[addr] = p->value;
+        }
         fprintf(stderr, "som: cheat %s applied in memory\n", kCheats[i].option);
     }
     return 1;

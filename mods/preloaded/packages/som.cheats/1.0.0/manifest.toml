@@ -6,13 +6,8 @@ author = "Almar's Guides (Pro Action Replay), RPGClassics (RAM map, Galoob Game 
 description = "Cheat codes that work on the recompiled game: RAM codes, rewritten every frame, and codes that change game data (prices, stats, event scripts)."
 resolver = "declarative"
 
-# The Italian translation (Mumble Translation v2.0) this executable verifies.
-[[target]]
-game_id = "secret-of-mana"
-rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
-
-# The original US release the language pack starts from: the same game, before
-# the translation, which the pack turns into the image above in memory.
+# The original US release the player provides. The Italian translation, when
+# selected in the launcher, is applied to it in memory before the mods.
 [[target]]
 game_id = "secret-of-mana"
 rom_sha256 = "4c15013131351e694e05f22e38bb1b3e4031dedac77ec75abecebe8520d82d5f"

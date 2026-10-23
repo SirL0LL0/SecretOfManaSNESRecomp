@@ -1,0 +1,2 @@
+# dependencies.lock.json pins the patch's SHA-256: keep its bytes as committed.
+*.patch -text

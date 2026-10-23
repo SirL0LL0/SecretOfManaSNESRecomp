@@ -4,17 +4,27 @@ This project builds a desktop runner and a headless runner around generated SNES
 
 ## Reproducible build
 
-Requirements: CMake 3.20+, Ninja, Git, Python 3, and a C compiler. `dependencies.lock.json` pins the framework and UI Git commits, the SHA-256 hash of the Secret of Mana framework patch, and the pinned SDL3 version and archive SHA-256. Checkout paths default to sibling folders `../snesrecomp` and `../snesrecomp/recomp-ui`.
+Requirements: CMake 3.20+, Ninja, Git, Python 3, Rust (cargo, for the framework's native analyzer), and a C compiler. `dependencies.lock.json` pins the framework and UI Git commits, the SHA-256 of the recomp-ui patch, and the SDL3 version and archive SHA-256. Checkout paths default to sibling folders `../snesrecomp` and `../snesrecomp/recomp-ui`.
 
-Windows: `.\build.ps1`  
-macOS/Linux: `sh build.sh`
+- snesrecomp: [SirL0LL0/snesrecomp](https://github.com/SirL0LL0/snesrecomp), branch `som-upstream-2026-10-23`: upstream mstan/snesrecomp (86c80cb) plus the Secret of Mana framework changes and the launcher's language hooks.
+- recomp-ui: upstream mstan/recomp-ui (7c635c6) plus `patches/recomp-ui-som-language.patch` (language selector, translation-file picker, Italian strings), applied by the build scripts.
 
-Both scripts verify the dependency origins and exact revisions, apply the checked-in framework patch when needed, and verify its SHA-256 hash before building. To use other checkout paths, set `SNESRECOMP_ROOT` and optionally `RECOMP_UI_ROOT`; the checkouts must still match the lock file. Outputs are `build/som_recomp` and `build/som_headless` (with `.exe` on Windows). SDL3 is fetched at the pinned version if no package is installed.
+You provide the ROM: **Secret of Mana (USA)**, SHA-256 `4c15013131351e694e05f22e38bb1b3e4031dedac77ec75abecebe8520d82d5f`. Generate the code from it once, then build:
 
-The ROM the executable was generated from is the Italian translation, and that is the digest the
-launcher checks first. The original English release is accepted as well (see **Mods → Language**):
-the launcher takes either, and the language package turns the English one into the image the code was
-made from, in memory.
+Windows: `.\tools\generate.ps1 -Rom "path\to\Secret of Mana (USA).sfc"`, then `.\build.ps1`  
+macOS/Linux: `python3 ../snesrecomp/snesrecomp_cli.py generate --rom <rom> --cfg-dir config --out-dir generated --no-host-root-scan`, then `sh build.sh`
+
+The build scripts verify the dependency origins and exact revisions, check the recomp-ui patch's SHA-256 and apply it when needed. To use other checkout paths, set `SNESRECOMP_ROOT` and optionally `RECOMP_UI_ROOT`; the checkouts must still match the lock file. Outputs are `build/som_recomp` and `build/som_headless` (with `.exe` on Windows). SDL3 is fetched at the pinned version if no package is installed.
+
+## Languages
+
+The game starts in English with the US ROM alone. The launcher and its menus are in English by default too.
+
+**Settings → Localization** offers Italian through the Mumble Translation (Mumble Team), version 2.01. **The patch is not distributed here**: download it from the official site, [mumble.romhacking.it/som.html](https://mumble.romhacking.it/som.html), and in the launcher choose `Secret of Mana (USA).ips` from the archive (`Translation patch → Browse`). The **Language** selector becomes usable only once that file has been checked (SHA-256 `e5207bc3d79f12ba5d381ac905532736a5fb3ba3759bf1feeeb70e6ea0d13928`). The patch for the European ROM, an older version or another file is refused, with the reason shown under the selector. Choosing **Italiano** also switches the launcher and the in-game menu to Italian.
+
+The patch is applied to the image in memory before `SnesInit` (`src/som_main.c`, `SomApplyLanguage`), and the result is checked against the SHA-256 of the translated image. The ROM on disk is never modified. The choice is stored in config.ini (`[General] Language`, `LanguageFile`).
+
+A single recompiled module serves both languages. The code is generated from the US ROM. Of all the bytes the translation changes, only 10 fall inside recompiled code: the operands of nine `LDX #ptr; JSR $5C2A` instructions in bank C0 that point to the moved text. `config/bankc0.cfg` declares them `live_operand`, so the recompiled code reads them from the image at run time. Everything else the translation moves (text, scripts, graphics, the decompressor) is data. Version 2.01 also corrects the waterfall bridge dialog (`28 00 52`), so the separate fixes package is no longer needed.
 
 ## Measure recompilation coverage
 
@@ -44,37 +54,13 @@ The host clock catches up after short hitches (up to four frames, the size of th
 
 ## Mods
 
-**Mods → Language → Italiano** (off by default) lets the game run in Italian starting from the original
-English (US) release. **The patch is not distributed here**: the player downloads it from the official
-archive (mumble.romhacking.it/som.html) and picks the file on the Mods page. The launcher takes either
-the English ROM or the already-translated one; the package in `mods/preloaded/packages/som.language/`
-applies the chosen patch in memory, before `SnesInit`, and checks the result against the SHA-256 of
-the image this executable was generated from, so a wrong patch refuses the launch instead of running
-half-translated. The ROM file on disk is never modified.
-
-Why this works in a recompilation: the translation moves the text, the script and the graphics, and
-with them the *pointers* the code holds to them. Of the 124545 bytes the translation changes, 117
-fall inside recompiled code -- the text pointers and the place the decompressor was moved to. The code
-in this executable was generated from the translated ROM, so its pointers are already the
-translation's: the patched image is exactly the one the code expects, and the result is byte-identical
-to running with the translated ROM (verified: the framebuffer, VRAM, WRAM, OAM, CGRAM and the
-registers all match).
-
-The English release is the base the patch starts from, not a language the player picks: the code in
-this executable is the translation's, and a translation that puts the text somewhere else changes the
-addresses inside the recompiled code. An English default therefore means generating the code from the
-English ROM, and then the Italian option needs either its own module or the text addresses read from
-the image.
-
-**Mods → Music → Restore Unused Fanfares** (off by default) plays the two unused fanfares, for the Sea Hare's Tail and the Moogle Belt. It is Kethinov's patch, version 1.2, with its three records moved to where the Italian translation keeps them. The package is in `mods/preloaded/packages/som.restore-unused-fanfares/`. When the mod is enabled, `src/som_main.c` applies its IPS to the in-memory image before `SnesInit` and checks the result against the SHA-256 in the manifest. The ROM file on disk is never modified. The change takes effect at the next launch.
+**Mods → Music → Restore Unused Fanfares** (off by default) plays the two unused fanfares, for the Sea Hare's Tail and the Moogle Belt. It is Kethinov's patch, version 1.2: `src/som_main.c` writes its three records to the in-memory image before `SnesInit`, at the US offsets or, in Italian, where the translation keeps them, after checking the bytes it replaces. The ROM file on disk is never modified. The change takes effect at the next launch.
 
 **Mods → Music → MSU-1 Music** (off by default) plays CD-quality music from DarkShock's Secret of Mana MSU-1 hack v1.0. Choose the music pack folder, the one holding `som_msu1-0.pcm` through `som_msu1-58.pcm`, on the mod's row. The hack's assembly patches recompiled code: the music routine at C3:0004, the reset path, and the NMI vector. It also puts its code at CB:3400, where the Italian translation keeps its credits text. So its bytes are not applied. `src/som_msu1_patch.c` is the same logic in C, routine for routine. The build links it in place of the recompiled `bank_C3_0004_M1X0` at that routine's call sites, and when the hack would fall through, the recompiled original runs. Nothing goes through the interpreter. A track missing from the pack falls back to the SPC, as in the hack. After a save-state load, the track the game was playing is restarted.
 
-**Mods → Cheats → Cheats** (off by default; turn on the feature, then each cheat) offers the codes from Almar's Guides (Pro Action Replay) and RPGClassics (its RAM map, and Galoob's official Game Genie list), with duplicates merged. Only codes that work on recompiled code, with no interpreter, are offered. RAM codes are rewritten after every frame, as a PAR does. Codes that change game data (price tables, the level-16 stat row, two event-script operands) patch the image in memory before `SnesInit`. The event-script operands moved with the translated script, so they are applied at their Italian offsets, found by the bytes around them. Codes that change instructions are not offered: the recompiled code carries its instructions in the binary, so they would only work in the interpreter. The table and the reason for each choice are in `src/som_cheats.c`.
+**Mods → Cheats → Cheats** (off by default; turn on the feature, then each cheat) offers the codes from Almar's Guides (Pro Action Replay) and RPGClassics (its RAM map, and Galoob's official Game Genie list), with duplicates merged. Only codes that work on recompiled code, with no interpreter, are offered. RAM codes are rewritten after every frame, as a PAR does. Codes that change game data (price tables, the level-16 stat row, two event-script operands) patch the image in memory before `SnesInit`. The event-script operands move with the translated script, so in Italian they are applied at the translation's offsets (v2.01), found by the bytes around them. Codes that change instructions are not offered: the recompiled code carries its instructions in the binary, so they would only work in the interpreter. The table and the reason for each choice are in `src/som_cheats.c`.
 
 Gold, Max Money and the Mana Sword write the game block at $7ECC40, and orbs and Mana powers write $7ECF90. Until a game is running, the game keeps routines at those addresses and runs them from WRAM, so those writes wait until each routine is gone. Writing every frame from power-on had broken that routine and left a black screen before the title menu. Unlimited Gold holds 999,999, the game's maximum, rather than the listed $FFFFFF.
-
-**Mods → Translation → Italian translation fixes** (on by default) corrects bytes of the translated event script in memory. So far it fixes one byte. On the waterfall bridge in the prologue, Timothy's "Dev'essere una specie di tesoro!" was printed outside the text box and then in a borderless box. The translation ended the previous two-line box with `28 00 51`, which closes the box, instead of `28 00 52`, which clears it and continues. With the fix the scene matches the US release, checked in Mesen. A scan of the script for the same pattern found no other case.
 
 ## Save states and fast-forward
 

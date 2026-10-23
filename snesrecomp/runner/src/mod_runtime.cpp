@@ -27,6 +27,25 @@
 namespace fs = std::filesystem;
 
 namespace SNESRecomp {
+/* Every function reachable from C (the snes_mod_* API and the launcher's
+ * provider callbacks) runs inside SNES_MOD_C_BEGIN / SNES_MOD_C_END. An
+ * exception must not cross into C: it reaches std::terminate and the player
+ * sees a crash with no message. A path the platform cannot convert
+ * (std::filesystem_error) is the known case. It becomes the runtime error,
+ * which the Mods page and the host's "mods:" log line already report. */
+void mod_boundary_exception(const char* where, const char* what);
+}  // namespace SNESRecomp
+
+#define SNES_MOD_C_BEGIN try {
+#define SNES_MOD_C_END(...)                                                   \
+    } catch (const std::exception& boundary_error) {                          \
+        SNESRecomp::mod_boundary_exception(__func__, boundary_error.what());  \
+    } catch (...) {                                                           \
+        SNESRecomp::mod_boundary_exception(__func__, "unknown exception");    \
+    }                                                                         \
+    return __VA_ARGS__;
+
+namespace SNESRecomp {
 namespace {
 
 constexpr uint64_t kMaxArchiveBytes = 256ull * 1024ull * 1024ull;
@@ -135,7 +154,10 @@ struct VariantRow {
     uint32_t boot_entry = 0;
 };
 
-/* An IPS/BPS applied in memory to a variant's verified source image. */
+/* DEPRECATED: legacy patched-ROM recompilation compatibility only.
+ * New mods reimplement hack behavior against the stock ROM through trusted
+ * plugins and supported package data, rather than recompiling patched ROMs.
+ * Title-specific ingestion/import engines are a separate integration path. */
 struct PatchRow {
     std::string feature_id;
     std::string id;
@@ -273,6 +295,15 @@ Runtime& state() {
     static Runtime value;
     return value;
 }
+
+}  // namespace
+
+void mod_boundary_exception(const char* where, const char* what) {
+    std::fprintf(stderr, "mods: %s failed: %s\n", where, what);
+    state().error = std::string("Mods are unavailable: ") + what;
+}
+
+namespace {
 
 void set_error(std::string* out, const std::string& value) {
     if (out) *out = value;
@@ -902,6 +933,13 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
             return false;
         }
     }
+    if (!out.patches.empty()) {
+        std::fprintf(stderr,
+            "snesrecomp: package '%s': [[patch]] patched-ROM recompilation "
+            "is deprecated; reimplement ROM-hack behavior as stock-ROM mods. "
+            "Legacy manifest accepted for compatibility.\n",
+            out.id.c_str());
+    }
     return true;
 }
 
@@ -1194,6 +1232,26 @@ std::string resource_path(Runtime& runtime, const Package& package,
 }
 
 bool sha256_file(const fs::path& path, std::string& out, std::string* error);
+
+const SnesRomRevision* g_rom_catalog = nullptr;
+int g_rom_catalog_count = 0;
+unsigned g_rom_catalog_generation = 0;   /* invalidates memoized statuses */
+
+/* Status for a ROM resource whose digest is not the required one: which dump
+ * it is (from the port's catalog), or its header when unknown, and what to
+ * select instead. */
+std::string wrong_rom_status_uncached(const Resource& resource,
+                                     const std::string& path_text) {
+    char why[256] = "";
+    const SnesRomVerdict verdict = snes_rom_identity_check_file(
+        path_text.c_str(), g_rom_catalog, g_rom_catalog_count,
+        resource.normalized_sha256.c_str(), nullptr, nullptr, nullptr, why,
+        sizeof(why));
+    if (verdict == kSnesRom_Ok || !why[0])
+        return "Wrong ROM: select the original supported version";
+    return why;
+}
+
 bool validate_resource_file(const Resource& resource,
                             const std::string& path_text,
                             std::string* status) {
@@ -1225,7 +1283,13 @@ bool validate_resource_file(const Resource& resource,
         }
     }
     if (!resource.normalized_sha256.empty()) {
-        struct HashMemo { uintmax_t size; fs::file_time_type time; std::string hash; };
+        /* The status is drawn every frame: keep the explanation for a wrong
+         * ROM with its digest rather than reading the file again. */
+        struct HashMemo {
+            uintmax_t size; fs::file_time_type time; std::string hash;
+            std::string wrong_for; std::string wrong_status;
+            unsigned wrong_generation;
+        };
         static std::map<std::string, HashMemo> memo;
         const auto size = fs::file_size(path, ec);
         if (ec || size > 64 * 1024 * 1024) { if (status) *status = "ROM size is invalid"; return false; }
@@ -1235,10 +1299,20 @@ bool validate_resource_file(const Resource& resource,
         if (found == memo.end() || found->second.size != size || found->second.time != time) {
             std::string hash, error;
             if (!sha256_file(path, hash, &error)) { if (status) *status = "Cannot read ROM"; return false; }
-            found = memo.insert_or_assign(path_text, HashMemo{size,time,hash}).first;
+            found = memo.insert_or_assign(path_text, HashMemo{size,time,hash,{},{},0}).first;
         }
         if (found->second.hash != resource.normalized_sha256) {
-            if (status) *status = "Wrong ROM: select the original supported version";
+            if (status) {
+                if (found->second.wrong_for != resource.normalized_sha256 ||
+                    found->second.wrong_generation != g_rom_catalog_generation ||
+                    found->second.wrong_status.empty()) {
+                    found->second.wrong_status =
+                        wrong_rom_status_uncached(resource, path_text);
+                    found->second.wrong_for = resource.normalized_sha256;
+                    found->second.wrong_generation = g_rom_catalog_generation;
+                }
+                *status = found->second.wrong_status;
+            }
             return false;
         }
         if (status) *status = "ROM verified";
@@ -2389,11 +2463,14 @@ std::vector<const Package*> visible_packages(Runtime& runtime) {
 }
 
 int provider_package_count(void*) {
+    SNES_MOD_C_BEGIN
     return (int)visible_packages(state()).size();
+    SNES_MOD_C_END(0)
 }
 
 int provider_package_get(void*, int index,
                          RecompLauncherCModPackage* out) {
+    SNES_MOD_C_BEGIN
     if (!out || index < 0) return 0;
     const auto packages = visible_packages(state());
     if ((size_t)index >= packages.size()) return 0;
@@ -2424,27 +2501,35 @@ int provider_package_get(void*, int index,
     copy_text(out->status, out->has_error ? "Needs attention" :
                    (out->enabled ? "Enabled" : "Installed"));
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 int provider_option_get(void*, const char*, int,
                         RecompLauncherCModOption*) {
+    SNES_MOD_C_BEGIN
     return 0;
+    SNES_MOD_C_END(0)
 }
 
 int provider_choice_get(void*, const char*, const char*, int,
                         RecompLauncherCModChoice*) {
+    SNES_MOD_C_BEGIN
     return 0;
+    SNES_MOD_C_END(0)
 }
 
 int provider_version_count(void*, const char* package_id) {
+    SNES_MOD_C_BEGIN
     if (!package_id) return 0;
     const auto package = state().packages.find(package_id);
     return package == state().packages.end() ? 0 :
                                               (int)package->second.size();
+    SNES_MOD_C_END(0)
 }
 
 int provider_version_get(void*, const char* package_id, int index,
                          RecompLauncherCModVersion* out) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !out || index < 0) return 0;
     const auto package = state().packages.find(package_id);
     if (package == state().packages.end() ||
@@ -2465,9 +2550,11 @@ int provider_version_get(void*, const char* package_id, int index,
             });
     }
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 int provider_install(void*, const char* archive_path) {
+    SNES_MOD_C_BEGIN
     if (!archive_path) return 0;
     std::string id;
     std::string version;
@@ -2481,10 +2568,12 @@ int provider_install(void*, const char* archive_path) {
     refresh_validation();
     state().error.clear();
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 int provider_remove(void*, const char* package_id,
                     const char* version) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !version) return 0;
     const Package* selected = selected_package(state(), package_id);
     if (selected && selected->builtin_diagnostic) return 0;
@@ -2511,9 +2600,11 @@ int provider_remove(void*, const char* package_id,
     refresh_validation();
     state().error.clear();
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 int provider_enable(void*, const char* package_id, int enabled) {
+    SNES_MOD_C_BEGIN
     if (!package_id) return 0;
     const Package* package = selected_package(state(), package_id);
     if (!package) return 0;
@@ -2527,10 +2618,12 @@ int provider_enable(void*, const char* package_id, int enabled) {
     refresh_validation();
     state().error.clear();
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 int provider_select(void*, const char* package_id,
                     const char* version) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !version) return 0;
     const auto package = state().packages.find(package_id);
     if (package == state().packages.end() ||
@@ -2542,15 +2635,19 @@ int provider_select(void*, const char* package_id,
     refresh_validation();
     state().error.clear();
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 int provider_set_option(void*, const char*, const char*,
                         const char*) {
+    SNES_MOD_C_BEGIN
     state().error = "Package-level options are not used; edit the feature.";
     return 0;
+    SNES_MOD_C_END(0)
 }
 
 int provider_commit(void*, const char* image_path) {
+    SNES_MOD_C_BEGIN
     std::string error;
     if (!mod_runtime_commit(
             image_path ? fs::path(image_path) : fs::path(), &error)) {
@@ -2559,18 +2656,24 @@ int provider_commit(void*, const char* image_path) {
     }
     state().error.clear();
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 const char* provider_error(void*) {
+    SNES_MOD_C_BEGIN
     return state().error.c_str();
+    SNES_MOD_C_END(nullptr)
 }
 
 int provider_feature_count(void*) {
+    SNES_MOD_C_BEGIN
     return (int)selected_features(state()).size();
+    SNES_MOD_C_END(0)
 }
 
 int provider_feature_get(void*, int index,
                          RecompLauncherCModFeature* out) {
+    SNES_MOD_C_BEGIN
     if (!out || index < 0) return 0;
     const auto features = selected_features(state());
     if ((size_t)index >= features.size()) return 0;
@@ -2609,11 +2712,13 @@ int provider_feature_get(void*, int index,
         copy_text(out->status, status);
     }
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 int provider_feature_option_get(
     void*, const char* package_id, const char* feature_id, int index,
     RecompLauncherCModOption* out) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !feature_id || !out || index < 0) return 0;
     const Package* package = selected_package(state(), package_id);
     if (!package || !find_feature(*package, feature_id)) return 0;
@@ -2639,11 +2744,13 @@ int provider_feature_option_get(
     out->step = option.step;
     out->choice_count = (int)option.choices.size();
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 int provider_feature_choice_get(
     void*, const char* package_id, const char* feature_id,
     const char* option_id, int index, RecompLauncherCModChoice* out) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !feature_id || !option_id ||
         !out || index < 0)
         return 0;
@@ -2656,6 +2763,7 @@ int provider_feature_choice_get(
     copy_text(out->value, option->choices[(size_t)index].value);
     copy_text(out->label, option->choices[(size_t)index].label);
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 #endif /* RECOMP_LAUNCHER */
@@ -2665,6 +2773,7 @@ int provider_feature_choice_get(
  * the provider table below merely points at them. */
 int provider_feature_enable(void*, const char* package_id,
                             const char* feature_id, int enabled) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !feature_id) return 0;
     const Package* package = selected_package(state(), package_id);
     const Feature* feature = package ? find_feature(*package, feature_id) : nullptr;
@@ -2678,11 +2787,13 @@ int provider_feature_enable(void*, const char* package_id,
     refresh_validation();
     state().error.clear();
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 int provider_feature_set_option(
     void*, const char* package_id, const char* feature_id,
     const char* option_id, const char* value) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !feature_id || !option_id || !value) return 0;
     const Package* package = selected_package(state(), package_id);
     if (!package) return 0;
@@ -2700,11 +2811,13 @@ int provider_feature_set_option(
     refresh_validation();
     state().error.clear();
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 #if defined(RECOMP_LAUNCHER)
 int provider_diagnostic_count(void*, const char* package_id,
                               const char* feature_id) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !feature_id) return 0;
     return (int)std::count_if(
         state().validation.diagnostics.begin(),
@@ -2713,11 +2826,13 @@ int provider_diagnostic_count(void*, const char* package_id,
             return diagnostic.package_id == package_id &&
                    diagnostic.feature_id == feature_id;
         });
+    SNES_MOD_C_END(0)
 }
 
 int provider_diagnostic_get(
     void*, const char* package_id, const char* feature_id,
     int index, RecompLauncherCModDiagnostic* out) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !feature_id || !out || index < 0) return 0;
     for (const Diagnostic& diagnostic : state().validation.diagnostics) {
         if (diagnostic.package_id != package_id ||
@@ -2735,10 +2850,12 @@ int provider_diagnostic_get(
         return 1;
     }
     return 0;
+    SNES_MOD_C_END(0)
 }
 
 int provider_feature_resource_count(void*, const char* package_id,
                                     const char* feature_id) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !feature_id) return 0;
     const Package* package = selected_package(state(), package_id);
     if (!package || !find_feature(*package, feature_id)) return 0;
@@ -2747,11 +2864,13 @@ int provider_feature_resource_count(void*, const char* package_id,
         [&](const Resource& resource) {
             return resource.feature_id == feature_id;
         });
+    SNES_MOD_C_END(0)
 }
 
 int provider_feature_resource_get(void*, const char* package_id,
                                   const char* feature_id, int index,
                                   RecompLauncherCModResource* out) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !feature_id || !out || index < 0) return 0;
     const Package* package = selected_package(state(), package_id);
     if (!package) return 0;
@@ -2777,12 +2896,14 @@ int provider_feature_resource_get(void*, const char* package_id,
     out->required = resource.required ? 1 : 0;
     out->verified = verified ? 1 : 0;
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 int provider_feature_resource_set_path(void*, const char* package_id,
                                        const char* feature_id,
                                        const char* resource_id,
                                        const char* path) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !feature_id || !resource_id || !path) return 0;
     const Package* package = selected_package(state(), package_id);
     if (!package || !find_feature(*package, feature_id) ||
@@ -2794,6 +2915,7 @@ int provider_feature_resource_set_path(void*, const char* package_id,
     refresh_validation();
     state().error.clear();
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 RecompLauncherCModProvider provider = {
@@ -3010,6 +3132,7 @@ const RecompLauncherCModProvider* mod_runtime_launcher_provider() {
 
 extern "C" int snes_mod_register_activation_plugin(
     const char* id, SNESModActivationCallback callback) {
+    SNES_MOD_C_BEGIN
     if (!id || !callback || !SNESRecomp::valid_id(id)) return 0;
     auto& plugins = SNESRecomp::registered_plugins();
     const auto prior = plugins.find(id);
@@ -3021,59 +3144,73 @@ extern "C" int snes_mod_register_activation_plugin(
      * and registering the ordinary way leaves it unclassified, which is the
      * safe answer for every plugin that predates the distinction. */
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_register_presentation_plugin(
     const char* id, SNESModActivationCallback callback) {
+    SNES_MOD_C_BEGIN
     if (!snes_mod_register_activation_plugin(id, callback)) return 0;
     SNESRecomp::registered_plugins()[id].presentation = true;
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_register_reset_callback(
     SNESModActivationCallback callback) {
+    SNES_MOD_C_BEGIN
     if (!callback) return 0;
     auto& callbacks = SNESRecomp::reset_callbacks();
     if (std::find(callbacks.begin(), callbacks.end(), callback) ==
         callbacks.end())
         callbacks.push_back(callback);
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_register_frame_callback(SNESModFrameCallback callback) {
+    SNES_MOD_C_BEGIN
     if (!callback) return 0;
     auto& callbacks = SNESRecomp::frame_callbacks();
     if (std::find(callbacks.begin(), callbacks.end(), callback) ==
         callbacks.end())
         callbacks.push_back(callback);
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_register_apu_write_callback(
     SNESModApuWriteCallback callback) {
+    SNES_MOD_C_BEGIN
     if (!callback) return 0;
     auto& callbacks = SNESRecomp::apu_write_callbacks();
     if (std::find(callbacks.begin(), callbacks.end(), callback) ==
         callbacks.end())
         callbacks.push_back(callback);
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" void snes_mod_runtime_frame_tick_c(void) {
+    SNES_MOD_C_BEGIN
     for (SNESModFrameCallback callback : SNESRecomp::frame_callbacks())
         if (callback) callback();
+    SNES_MOD_C_END()
 }
 
 extern "C" int snes_mod_runtime_filter_apu_write_c(
     uint16_t reg, uint8_t value) {
+    SNES_MOD_C_BEGIN
     for (SNESModApuWriteCallback callback : SNESRecomp::apu_write_callbacks()) {
         if (callback && callback(reg, value))
             return 1;
     }
     return 0;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_request_synthetic_sram_c(uint32_t bytes) {
+    SNES_MOD_C_BEGIN
     if (bytes < 1024 || bytes > 128 * 1024 || (bytes & (bytes - 1)) != 0)
         return 0;
     uint32_t& requested = SNESRecomp::synthetic_sram_size();
@@ -3081,24 +3218,30 @@ extern "C" int snes_mod_request_synthetic_sram_c(uint32_t bytes) {
         return 0;
     requested = bytes;
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" uint32_t snes_mod_runtime_synthetic_sram_size_c(void) {
+    SNES_MOD_C_BEGIN
     return SNESRecomp::synthetic_sram_size();
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_runtime_initialize_c(
     const char* root, const char* game_id, const char* rom_sha256) {
+    SNES_MOD_C_BEGIN
     std::string error;
     return SNESRecomp::mod_runtime_initialize(
         root ? fs::path(root) : fs::path("mods"),
         game_id ? game_id : "",
         rom_sha256 ? rom_sha256 : "", {}, &error) ? 1 : 0;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_runtime_initialize_multi_c(
     const char* root, const char* game_id, const char* rom_sha256,
     const char* const* accepted_rom_sha256, int num_accepted) {
+    SNES_MOD_C_BEGIN
     std::vector<std::string> accepted;
     for (int i = 0; i < num_accepted; ++i) {
         if (accepted_rom_sha256 && accepted_rom_sha256[i] && accepted_rom_sha256[i][0])
@@ -3109,24 +3252,41 @@ extern "C" int snes_mod_runtime_initialize_multi_c(
         root ? fs::path(root) : fs::path("mods"),
         game_id ? game_id : "",
         rom_sha256 ? rom_sha256 : "", accepted, &error) ? 1 : 0;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_runtime_commit_c(const char* rom_path) {
+    SNES_MOD_C_BEGIN
     std::string error;
     return SNESRecomp::mod_runtime_commit(
         rom_path ? fs::path(rom_path) : fs::path(), &error) ? 1 : 0;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" void snes_mod_runtime_activate_plugins_c(void) {
+    SNES_MOD_C_BEGIN
     SNESRecomp::mod_runtime_activate_plugins();
+    SNES_MOD_C_END()
+}
+
+extern "C" void snes_mod_runtime_set_rom_catalog_c(const SnesRomRevision* catalog,
+                                                   int count) {
+    SNES_MOD_C_BEGIN
+    SNESRecomp::g_rom_catalog = count > 0 ? catalog : nullptr;
+    SNESRecomp::g_rom_catalog_count = count > 0 && catalog ? count : 0;
+    ++SNESRecomp::g_rom_catalog_generation;
+    SNES_MOD_C_END()
 }
 
 extern "C" const char* snes_mod_runtime_last_error_c(void) {
+    SNES_MOD_C_BEGIN
     return SNESRecomp::state().error.c_str();
+    SNES_MOD_C_END(nullptr)
 }
 
 extern "C" int snes_mod_runtime_feature_enabled_c(
     const char* package_id, const char* feature_id) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !feature_id) return 0;
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
     if (!runtime.initialized) return 0;
@@ -3137,11 +3297,13 @@ extern "C" int snes_mod_runtime_feature_enabled_c(
         SNESRecomp::find_feature(*package, feature_id);
     if (!feature) return 0;
     return SNESRecomp::feature_enabled(runtime, *package, *feature) ? 1 : 0;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_runtime_feature_option_value_c(
     const char* package_id, const char* feature_id, const char* option_id,
     char* out, uint32_t cap) {
+    SNES_MOD_C_BEGIN
     if (!package_id || !feature_id || !option_id || !out || cap == 0)
         return 0;
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
@@ -3158,6 +3320,7 @@ extern "C" int snes_mod_runtime_feature_option_value_c(
         SNESRecomp::option_value(runtime, *package, *feature, *option);
     std::snprintf(out, cap, "%s", value.c_str());
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 /*
@@ -3214,6 +3377,7 @@ extern "C" int snes_mod_runtime_feature_option_value_c(
  * exemption only ever affects what netplay compares.
  */
 extern "C" void snes_mod_runtime_set_cosmetic_allow_c(const char* allow) {
+    SNES_MOD_C_BEGIN
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
     const std::string next = allow ? allow : "";
     if (next == runtime.cosmetic_allow) return;
@@ -3222,18 +3386,22 @@ extern "C" void snes_mod_runtime_set_cosmetic_allow_c(const char* allow) {
      * first thing anyone will want to know after an argument about one. */
     std::fprintf(stderr, "mods: cosmetic allowlist = %s\n",
                  next.empty() ? "(nothing exempt)" : next.c_str());
+    SNES_MOD_C_END()
 }
 
 extern "C" int snes_mod_runtime_get_cosmetic_allow_c(char* out, uint32_t cap) {
+    SNES_MOD_C_BEGIN
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
     const std::string& text = runtime.cosmetic_allow;
     if (out && cap) std::snprintf(out, cap, "%s", text.c_str());
     return (int)text.size();
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_runtime_package_digest_c(const char* package_id,
                                                  const char* version,
                                                  char* out, uint32_t cap) {
+    SNES_MOD_C_BEGIN
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
     std::string digest;
     if (out && cap) out[0] = '\0';
@@ -3253,6 +3421,7 @@ extern "C" int snes_mod_runtime_package_digest_c(const char* package_id,
         std::memcpy(out, digest.c_str(), digest.size() + 1);
     }
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 /*
@@ -3293,6 +3462,7 @@ extern "C" int snes_mod_runtime_package_digest_c(const char* package_id,
  * iteration) so two machines in the same state produce identical text.
  */
 extern "C" int snes_mod_runtime_exempted_packages_c(char* out, uint32_t cap) {
+    SNES_MOD_C_BEGIN
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
     std::string text;
     if (runtime.initialized) {
@@ -3327,10 +3497,12 @@ extern "C" int snes_mod_runtime_exempted_packages_c(char* out, uint32_t cap) {
     }
     if (out && cap) std::snprintf(out, cap, "%s", text.c_str());
     return (int)text.size();
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_runtime_unapproved_cosmetics_c(char* out,
                                                        uint32_t cap) {
+    SNES_MOD_C_BEGIN
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
     std::string text;
     if (runtime.initialized) {
@@ -3360,9 +3532,11 @@ extern "C" int snes_mod_runtime_unapproved_cosmetics_c(char* out,
     }
     if (out && cap) std::snprintf(out, cap, "%s", text.c_str());
     return (int)text.size();
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_runtime_effective_set_c(char* out, uint32_t cap) {
+    SNES_MOD_C_BEGIN
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
     std::string text;
     if (runtime.initialized) {
@@ -3409,6 +3583,7 @@ extern "C" int snes_mod_runtime_effective_set_c(char* out, uint32_t cap) {
         std::snprintf(out, cap, "%s", text.c_str());
     }
     return (int)text.size();
+    SNES_MOD_C_END(0)
 }
 
 /*
@@ -3442,6 +3617,7 @@ extern "C" int snes_mod_runtime_have_package_c(const char* package_id,
                                                const char* version,
                                                char* name_out,
                                                uint32_t name_cap) {
+    SNES_MOD_C_BEGIN
     if (name_out && name_cap) name_out[0] = '\0';
     if (!package_id) return -1;
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
@@ -3454,6 +3630,7 @@ extern "C" int snes_mod_runtime_have_package_c(const char* package_id,
                       any.name.empty() ? package_id : any.name.c_str());
     if (!version || !version[0]) return 1;
     return it->second.find(version) != it->second.end() ? 1 : 0;
+    SNES_MOD_C_END(0)
 }
 
 /*
@@ -3466,6 +3643,7 @@ extern "C" int snes_mod_runtime_have_package_c(const char* package_id,
  */
 extern "C" int snes_mod_runtime_missing_files_c(const char* package_id,
                                                 char* out, uint32_t cap) {
+    SNES_MOD_C_BEGIN
     if (out && cap) out[0] = '\0';
     if (!package_id) return 0;
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
@@ -3498,6 +3676,7 @@ extern "C" int snes_mod_runtime_missing_files_c(const char* package_id,
         used += feature.id.size();
     }
     return count;
+    SNES_MOD_C_END(0)
 }
 
 namespace {
@@ -3516,6 +3695,7 @@ bool row_field(char* dst, size_t cap, const std::string& value) {
 extern "C" int snes_mod_runtime_package_root_c(const char* package_id,
                                               const char* version,
                                               char* out, uint32_t cap) {
+    SNES_MOD_C_BEGIN
     if (out && cap) out[0] = '\0';
     if (!package_id || !out || !cap) return 0;
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
@@ -3537,6 +3717,7 @@ extern "C" int snes_mod_runtime_package_root_c(const char* package_id,
     if (root.size() + 1 > cap) return 0;
     std::memcpy(out, root.c_str(), root.size() + 1);
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_runtime_export_package_c(const char* package_id,
@@ -3544,6 +3725,7 @@ extern "C" int snes_mod_runtime_export_package_c(const char* package_id,
                                                 uint8_t** out, uint32_t* out_len,
                                                 char* sha256_hex, uint32_t sha_cap,
                                                 char* err, uint32_t err_cap) {
+    SNES_MOD_C_BEGIN
     auto fail = [&](const std::string& why) {
         if (err && err_cap) std::snprintf(err, err_cap, "%s", why.c_str());
         return 0;
@@ -3584,10 +3766,13 @@ extern "C" int snes_mod_runtime_export_package_c(const char* package_id,
     *out = blob;
     *out_len = (uint32_t)bytes.size();
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" void snes_mod_runtime_free_blob_c(uint8_t* blob) {
+    SNES_MOD_C_BEGIN
     std::free(blob);
+    SNES_MOD_C_END()
 }
 
 extern "C" int snes_mod_runtime_install_blob_c(const uint8_t* data, uint32_t len,
@@ -3595,6 +3780,7 @@ extern "C" int snes_mod_runtime_install_blob_c(const uint8_t* data, uint32_t len
                                                char* installed_id, uint32_t id_cap,
                                                char* installed_ver, uint32_t ver_cap,
                                                char* err, uint32_t err_cap) {
+    SNES_MOD_C_BEGIN
     auto fail = [&](const std::string& why) {
         if (err && err_cap) std::snprintf(err, err_cap, "%s", why.c_str());
         return 0;
@@ -3690,9 +3876,11 @@ extern "C" int snes_mod_runtime_install_blob_c(const uint8_t* data, uint32_t len
     if (installed_ver && ver_cap)
         std::snprintf(installed_ver, ver_cap, "%s", ver.c_str());
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_runtime_plan_rows_c(SnesModPkgRow* out, int max) {
+    SNES_MOD_C_BEGIN
     if (!out || max <= 0) return 0;
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
     if (!runtime.initialized) return 0;
@@ -3738,9 +3926,11 @@ extern "C" int snes_mod_runtime_plan_rows_c(SnesModPkgRow* out, int max) {
         out[n++] = row;
     }
     return n;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_runtime_installed_rows_c(SnesModPkgRow* out, int max) {
+    SNES_MOD_C_BEGIN
     if (!out || max <= 0) return 0;
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
     if (!runtime.initialized) return 0;
@@ -3761,10 +3951,12 @@ extern "C" int snes_mod_runtime_installed_rows_c(SnesModPkgRow* out, int max) {
         }
     }
     return n;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" int snes_mod_runtime_check_set_c(const char* want, char* reason,
                                             uint32_t cap) {
+    SNES_MOD_C_BEGIN
     auto say = [&](const std::string& text) {
         if (reason && cap) std::snprintf(reason, cap, "%s", text.c_str());
     };
@@ -3845,6 +4037,7 @@ extern "C" int snes_mod_runtime_check_set_c(const char* want, char* reason,
      * difference is what we have SELECTED, which the player can fix. */
     say("your selection differs; match the host's");
     return SNES_MODSET_OPTION;
+    SNES_MOD_C_END(0)
 }
 
 /*
@@ -3869,6 +4062,7 @@ extern "C" int snes_mod_runtime_check_set_c(const char* want, char* reason,
  */
 extern "C" int snes_mod_runtime_adopt_set_c(const char* want, char* reason,
                                             uint32_t cap) {
+    SNES_MOD_C_BEGIN
     auto say = [&](const std::string& text) {
         if (reason && cap) std::snprintf(reason, cap, "%s", text.c_str());
     };
@@ -3973,19 +4167,23 @@ extern "C" int snes_mod_runtime_adopt_set_c(const char* want, char* reason,
     }
     say("");
     return SNES_MODSET_OK;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" const RecompLauncherCModProvider*
 snes_mod_runtime_launcher_provider_c(void) {
+    SNES_MOD_C_BEGIN
 #if defined(RECOMP_LAUNCHER)
     return SNESRecomp::state().initialized
         ? SNESRecomp::mod_runtime_launcher_provider() : nullptr;
 #else
     return nullptr;
 #endif
+    SNES_MOD_C_END(nullptr)
 }
 
 extern "C" int snes_mod_runtime_begin_temporary_c(void) {
+    SNES_MOD_C_BEGIN
     auto& runtime = SNESRecomp::state();
     if (!runtime.initialized) return 0;
     if (!runtime.temporary_selection) {
@@ -3993,9 +4191,11 @@ extern "C" int snes_mod_runtime_begin_temporary_c(void) {
         runtime.temporary_selection = true;
     }
     return 1;
+    SNES_MOD_C_END(0)
 }
 
 extern "C" void snes_mod_runtime_end_temporary_c(void) {
+    SNES_MOD_C_BEGIN
     auto& runtime = SNESRecomp::state();
     if (!runtime.temporary_selection) return;
     for (const auto& [id, package] : runtime.selections)
@@ -4006,12 +4206,14 @@ extern "C" void snes_mod_runtime_end_temporary_c(void) {
     runtime.committed = {};
     runtime.cosmetic_allow.clear();
     SNESRecomp::refresh_validation();
+    SNES_MOD_C_END()
 }
 
 extern "C" int snes_mod_runtime_resource_path_c(const char* package_id,
                                                 const char* feature_id,
                                                 const char* resource_id,
                                                 char* out, uint32_t cap) {
+    SNES_MOD_C_BEGIN
     if (out && cap) out[0] = '\0';
     if (!package_id || !feature_id || !resource_id || !out || cap == 0) return 0;
     SNESRecomp::Runtime& runtime = SNESRecomp::state();
@@ -4029,4 +4231,5 @@ extern "C" int snes_mod_runtime_resource_path_c(const char* package_id,
     if (path.empty() || path.size() >= cap) return 0;
     std::snprintf(out, cap, "%s", path.c_str());
     return 1;
+    SNES_MOD_C_END(0)
 }

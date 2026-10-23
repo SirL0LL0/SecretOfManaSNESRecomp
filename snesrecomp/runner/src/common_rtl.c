@@ -30,6 +30,7 @@
 #include "snapshot_guard.h"
 #include "snes/dsp.h"
 #include "snes/cart.h"
+#include "snapshot_identity.h"
 #include "snes/dma.h"
 #include "snes/cx4.h"
 #include "snes/sa1.h"
@@ -263,6 +264,8 @@ void rtl_apu_restore_pacing(uint64_t frame_start_master, uint8_t frame_time_vali
 #define RTL_AUDIO_RECOVERY_RAMP 128u
 #define RTL_AUDIO_TARGET_NATIVES 2136u /* 4 native blocks, ~67 ms cushion */
 static bool g_audio_fast_forward;
+static void (*g_audio_producer_wait)(void);
+static _Thread_local bool g_audio_producer_wait_active;
 static uint32_t g_audio_recovery_frames;
 static uint32_t g_audio_recovery_remaining;
 static int16 g_audio_recovery_anchor_l;
@@ -307,7 +310,7 @@ static uint64_t fp_fnv1a(const uint8_t *p, size_t n) {
 // FILE-backed SaveLoadInfo. snes_saveload calls back into func() once per
 // scalar/blob; we route each call to fread/fwrite. Single magic+version
 // header lets future format changes be detected.
-#define RTL_SAV_MAGIC   0x52544c53u  /* "RTLS" */
+#define RTL_SAV_MAGIC rtl_snapshot_magic(g_snes && g_snes->cart && g_snes->cart->dsp1)
 /* v4: dropped Dma.pad[7] blob tail.
  * v5: optional game-specific chunk appended after the snes_saveload blob
  *     (RtlGameInfo.state_save_extra/state_load_extra) — e.g. MMX task-slot
@@ -340,6 +343,9 @@ typedef struct MemorySli {
   size_t position;
   bool is_save;
   bool error;
+  const void *locate;
+  size_t locate_size;
+  size_t *locate_offset;
 } MemorySli;
 
 static void file_sli_func(SaveLoadInfo *sli, void *data, size_t n) {
@@ -369,6 +375,8 @@ static void memory_sli_func(SaveLoadInfo *sli, void *data, size_t n) {
     memory->error = true;
     return;
   }
+  if (memory->locate_offset && memory->locate == data && memory->locate_size == n)
+    *memory->locate_offset = memory->position;
   memory->position += n;
 }
 
@@ -966,7 +974,8 @@ bool RtlLoadSnapshot(const char *filename) {
       || hdr[0] != RTL_SAV_MAGIC
       || hdr[1] < RTL_SAV_VERSION_MIN || hdr[1] > RTL_SAV_VERSION
       || (g_rtl_game_info && hdr[1] < g_rtl_game_info->minimum_state_version)) {
-    printf("Save file %s: bad magic/version (legacy StateRecorder format no longer supported)\n", filename);
+    printf("Save file %s: incompatible magic/version or DSP-1 implementation "
+           "(legacy untagged DSP-1 states are unsupported)\n", filename);
     fclose(f);
     return false;
   }
@@ -1004,8 +1013,12 @@ bool RtlLoadSnapshot(const char *filename) {
   return true;
 }
 
-size_t RtlSnapshotGuestSize(uint32 *version_out) {
+size_t RtlSnapshotGuestLayout(uint32 *version_out, size_t *wram_offset_out) {
+  size_t offset = SIZE_MAX;
   MemorySli count = {{&memory_sli_func}, NULL, 0, sizeof(uint32)*2, true, false};
+  count.locate = g_snes->ram;
+  count.locate_size = 0x20000;
+  count.locate_offset = &offset;
   RtlApuLock();
   uint32 previous = snes_saveload_get_version();
   /* snes_saveload normalizes the emulator-only E mirror even when counting.
@@ -1017,7 +1030,12 @@ size_t RtlSnapshotGuestSize(uint32 *version_out) {
   g_snes->cpu->e = e;
   RtlApuUnlock();
   if (version_out) *version_out = RTL_SAV_VERSION;
-  return count.error ? 0 : count.position;
+  if (wram_offset_out) *wram_offset_out = offset;
+  return count.error || offset == SIZE_MAX ? 0 : count.position;
+}
+
+size_t RtlSnapshotGuestSize(uint32 *version_out) {
+  return RtlSnapshotGuestLayout(version_out, NULL);
 }
 
 size_t RtlSaveSnapshotToMemory(void *data, size_t capacity) {
@@ -1043,6 +1061,9 @@ size_t RtlSaveSnapshotToMemory(void *data, size_t capacity) {
   return guard ? snes_snapshot_guard_finish(data,capacity,memory.position-prefix,guard)
                : memory.position;
 }
+
+static bool s_rollback_load;
+bool RtlIsRollbackLoad(void) {return s_rollback_load;}
 
 bool RtlLoadSnapshotFromMemory(const void *data, size_t size) {
   if (g_rtl_game_info && g_rtl_game_info->snapshot_allowed &&
@@ -1077,7 +1098,7 @@ bool RtlLoadSnapshotFromMemory(const void *data, size_t size) {
   RtlApuUnlock();
   if (memory.error) return false;
   g_snes->beamMasterLast = g_cpu.master_cycles;
-  snes_mod_audio_stop_all();
+  if(!s_rollback_load) snes_mod_audio_stop_all();
   PpuResetWidescreenOamHistory(g_snes->ppu);
   if (g_rtl_game_info && g_rtl_game_info->on_state_loaded)
     g_rtl_game_info->on_state_loaded(hdr[1]);
@@ -1441,7 +1462,10 @@ bool RtlRollbackLoadFromMemory(const void *data, size_t size) {
    * was on, and said so once per frame in the log. Netplay rollback had the
    * same shape waiting for it. Keep the counter across the load. */
   { const uint64_t generation = s_state_generation;
+    const bool previous_rollback_load=s_rollback_load;
+    s_rollback_load=true;
     ok = RtlLoadSnapshotFromMemory(data, guest);
+    s_rollback_load=previous_rollback_load;
     s_state_generation = generation; }
 
   /* The game's execution position goes back BEFORE the residue is applied and
@@ -1799,7 +1823,7 @@ void rtl_accumulate_apu_catchup(void) {
   }
 #endif
 #ifdef SNES_COSIM
-  /* Co-sim A-vs-B variable-under-test (SNES_COSIM.md task 9): with
+  /* Co-sim A-vs-B variable-under-test (docs/COSIM.md task 9): with
    * SNES_COSIM_ACCURATE_APU=1, pace the SPC from the region-weighted master
    * clock at the true SPC:master ratio (exactly like the interp816 ref),
    * instead of the +256/APU-touch synthetic estimate. Two recomp instances
@@ -1829,7 +1853,7 @@ void rtl_accumulate_apu_catchup(void) {
   // over-advances (music runs fast). The accumulator stays emitted as inert
   // Axis-5 infra (companion to cpu->cycles); a correct off-cue cure must pace by
   // WALL time / consumer rate, not accumulated execution cycles -- see
-  // SNES_ACCURACY_BURNDOWN.md. Reverted to the known-good touch estimate:
+  // docs/validation/accuracy-history.md. Reverted to the known-good touch estimate:
   uint64_t delta = g_apu_pace_cycles_estimate - g_apu_last_sync_cycles;
   g_apu_last_sync_cycles = g_apu_pace_cycles_estimate;
   // 2/7 is about 1/3.5 (main MHz / APU MHz). Floor of zero is fine -- short deltas
@@ -2205,6 +2229,21 @@ static void rtl_sync_apu_frame_boundary(void) {
 
 void RtlSetSpeculativeFrame(bool on) { g_rtl_speculative_frame = on; }
 bool RtlSpeculativeFrame(void) { return g_rtl_speculative_frame; }
+
+void RtlAudioSetProducerWait(void (*wait_for_consumer)(void)) {
+  g_audio_producer_wait = wait_for_consumer;
+}
+
+void RtlAudioWaitForConsumer(void) {
+  if (!g_audio_producer_wait || g_audio_fast_forward ||
+      g_rtl_speculative_frame || g_audio_producer_wait_active)
+    return;
+  /* A host may inspect its FIFO using RtlApuLock/Unlock in the callback.
+   * That unlock must not recursively enter the same wait. */
+  g_audio_producer_wait_active = true;
+  g_audio_producer_wait();
+  g_audio_producer_wait_active = false;
+}
 
 void RtlAudioSetFastForward(bool active) {
   if (!active && !g_audio_fast_forward && g_audio_recovery_frames == 0)
@@ -2618,21 +2657,25 @@ void RtlReadSram(void) {
   }
 }
 
-int RtlTryWriteSram(void) {
-  if (!g_sram || g_sram_size <= 0)
-    return 1;
-  char path[128], bak[140], tmp[140];
-  RtlEnsureSaveDir();
-  RtlSramFilePath(path, sizeof(path));
-  fprintf(stderr, "[sram] Writing to: %s\n", path);
-  snprintf(bak, sizeof(bak), "%s.bak", path);
-  snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+int RtlWriteSramImage(const char *path, const uint8 *bytes, size_t size) {
+  if (!path || !*path || (!bytes && size))
+    return 0;
+  size_t length = strlen(path);
+  if (length > SIZE_MAX / 2 - 5)
+    return 0;
+  char *bak = malloc((length + 5) * 2);
+  if (!bak)
+    return 0;
+  char *tmp = bak + length + 5;
+  memcpy(bak, path, length); memcpy(bak + length, ".bak", 5);
+  memcpy(tmp, path, length); memcpy(tmp + length, ".tmp", 5);
   FILE *f = fopen(tmp, "wb");
   if (!f) {
     fprintf(stderr, "Unable to write %s\n", tmp);
+    free(bak);
     return 0;
   }
-  int ok = fwrite(g_sram, 1, g_sram_size, f) == (size_t)g_sram_size;
+  int ok = !size || fwrite(bytes, 1, size, f) == size;
   ok = ok && fflush(f) == 0;
 #ifdef _WIN32
   ok = ok && _commit(_fileno(f)) == 0;
@@ -2643,6 +2686,7 @@ int RtlTryWriteSram(void) {
   if (!ok) {
     fprintf(stderr, "Unable to write %s\n", tmp);
     remove(tmp);
+    free(bak);
     return 0;
   }
   /* Keep exactly one previous revision. A missing current file (first save
@@ -2654,6 +2698,7 @@ int RtlTryWriteSram(void) {
     if (rename(path, bak) != 0) {
       fprintf(stderr, "Unable to rotate %s to %s\n", path, bak);
       remove(tmp);
+      free(bak);
       return 0;
     }
   }
@@ -2662,10 +2707,20 @@ int RtlTryWriteSram(void) {
     /* Put the previous revision back so the namespace still has a file. */
     rename(bak, path);
     remove(tmp);
+    free(bak);
     return 0;
   }
-  fprintf(stderr, "[sram] Successfully wrote %d bytes to %s\n", g_sram_size, path);
+  free(bak);
   return 1;
+}
+
+int RtlTryWriteSram(void) {
+  if (!g_sram || g_sram_size <= 0)
+    return 1;
+  char path[128];
+  RtlEnsureSaveDir();
+  RtlSramFilePath(path, sizeof(path));
+  return RtlWriteSramImage(path, g_sram, (size_t)g_sram_size);
 }
 
 int RtlWriteSram(void) { return RtlTryWriteSram(); }

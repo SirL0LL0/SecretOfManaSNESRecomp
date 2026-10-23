@@ -1,69 +1,435 @@
-schema_version = 1
-rom_revision = "Secret of Mana (USA) [T-It by Mumble Translation v2.0]"
-rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
+# AOT roots of the program generated from the Italian v2.0 image
+# (generated/program_manifest.json), so a regeneration compiles the same set.
+# ROM roots only: the WRAM routines among them run in the interpreter.
 
-# `address` is the actual supported-ROM CFG entry.
-# Add entries as disassembly/runtime analysis advances.
-
-[[function]]
-address = "00:8004"
+[[func]]
 name = "som_reset"
-aliases = ["I_RESET"]
-confidence = "proven"
-tags = ["reset", "bootstrap"]
-provenance = "snesrecomp v2 analysis (M1X1 AOT-eligible, tail-call to C1:0010)"
-note = "RESET vector handler; switches to bank $C1 and tail-calls bank_C1_0010."
+bank = 0x00
+addr = "8004"
+emit = true
+entry_m = 1
+entry_x = 1
 
-[[function]]
-address = "00:80EA"
-name = "som_nmi"
-aliases = ["I_NMI"]
-confidence = "proven"
-tags = ["nmi", "vector"]
-provenance = "snesrecomp v2 analysis (NMI vector entry)"
-note = "NMI vector entry point."
+[[func]]
+name = "FUNC_0087C4"
+bank = 0x00
+addr = "87C4"
+emit = true
+entry_m = 1
+entry_x = 1
 
-[[function]]
-address = "00:80EE"
-name = "som_irq"
-aliases = ["I_IRQ"]
-confidence = "proven"
-tags = ["irq", "vector"]
-provenance = "snesrecomp v2 analysis (IRQ vector entry)"
-note = "IRQ vector entry point."
+[[func]]
+name = "som_reset_vec"
+bank = 0x00
+addr = "D5B4"
+emit = true
+entry_m = 1
+entry_x = 1
 
-[[function]]
-address = "C1:0010"
+[[func]]
+name = "som_irq_vec"
+bank = 0x00
+addr = "D5C1"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_00E640"
+bank = 0x00
+addr = "E640"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_00EA19"
+bank = 0x00
+addr = "EA19"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_00FD1F"
+bank = 0x00
+addr = "FD1F"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01015B"
+bank = 0x01
+addr = "015B"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_010169"
+bank = 0x01
+addr = "0169"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_010179"
+bank = 0x01
+addr = "0179"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_010187"
+bank = 0x01
+addr = "0187"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_0101AE"
+bank = 0x01
+addr = "01AE"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_0101C7"
+bank = 0x01
+addr = "01C7"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_0101DE"
+bank = 0x01
+addr = "01DE"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_0101F7"
+bank = 0x01
+addr = "01F7"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_010213"
+bank = 0x01
+addr = "0213"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01021B"
+bank = 0x01
+addr = "021B"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_010245"
+bank = 0x01
+addr = "0245"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_010285"
+bank = 0x01
+addr = "0285"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01028D"
+bank = 0x01
+addr = "028D"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01032E"
+bank = 0x01
+addr = "032E"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_010343"
+bank = 0x01
+addr = "0343"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_010358"
+bank = 0x01
+addr = "0358"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_010404"
+bank = 0x01
+addr = "0404"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01054A"
+bank = 0x01
+addr = "054A"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01058B"
+bank = 0x01
+addr = "058B"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_010598"
+bank = 0x01
+addr = "0598"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_0105A5"
+bank = 0x01
+addr = "05A5"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_0105BA"
+bank = 0x01
+addr = "05BA"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_0105CF"
+bank = 0x01
+addr = "05CF"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_011FEB"
+bank = 0x01
+addr = "1FEB"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_012896"
+bank = 0x01
+addr = "2896"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_012997"
+bank = 0x01
+addr = "2997"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_012FE4"
+bank = 0x01
+addr = "2FE4"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_013D29"
+bank = 0x01
+addr = "3D29"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_013D48"
+bank = 0x01
+addr = "3D48"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_013D7D"
+bank = 0x01
+addr = "3D7D"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_0141F8"
+bank = 0x01
+addr = "41F8"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_0144A1"
+bank = 0x01
+addr = "44A1"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_0144B3"
+bank = 0x01
+addr = "44B3"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_014514"
+bank = 0x01
+addr = "4514"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01800F"
+bank = 0x01
+addr = "800F"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01859B"
+bank = 0x01
+addr = "859B"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_018D12"
+bank = 0x01
+addr = "8D12"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01B609"
+bank = 0x01
+addr = "B609"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01B66E"
+bank = 0x01
+addr = "B66E"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01C44F"
+bank = 0x01
+addr = "C44F"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01C599"
+bank = 0x01
+addr = "C599"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "FUNC_01CA6C"
+bank = 0x01
+addr = "CA6C"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
 name = "som_reset_continuation"
-aliases = ["bank_C1_0010"]
-confidence = "proven"
-tags = ["reset-continuation", "cross-bank"]
-provenance = "snesrecomp v2 analysis (M1X1 AOT-eligible, JML to C1:4CE5 LLE)"
-note = "Reset continuation target; JMLs back into bank $C1 at $4CE5 (LLE)."
+bank = 0xC1
+addr = "0010"
+emit = true
+entry_m = 1
+entry_x = 1
 
-[[function]]
-address = "C1:4C30"
-name = "som_init_body"
-aliases = ["bank_C1_4C30"]
-confidence = "proven"
-tags = ["init", "boot-body"]
-provenance = "snesrecomp v2 analysis (M1X0 AOT-eligible, 80 instructions)"
-note = "Main initialization body: direct-page setup, register saves, MVN copy, stack frame."
+[[func]]
+name = "FUNC_C10018"
+bank = 0xC1
+addr = "0018"
+emit = true
+entry_m = 1
+entry_x = 1
 
-[[function]]
-address = "C1:4CE5"
-name = "som_init_continuation_a"
-aliases = ["bank_C1_4CE5"]
-confidence = "contextual"
-tags = ["init-continuation", "lle-only"]
-provenance = "snesrecomp v2 analysis (LLE-only, truncated call continuation)"
-note = "Call target from C1:4C30; continuation not proven statically."
+[[func]]
+name = "bank_C1_4C30"
+bank = 0xC1
+addr = "4C30"
+emit = true
+entry_m = 1
+entry_x = 0
 
-[[function]]
-address = "C1:4D0F"
-name = "som_init_continuation_b"
-aliases = ["bank_C1_4D0F"]
-confidence = "contextual"
-tags = ["init-continuation", "lle-only"]
-provenance = "snesrecomp v2 analysis (LLE-only, truncated call continuation)"
-note = "Call target from C1:4CE5; calls back to C1:4C30 (LLE)."
+[[func]]
+name = "bank_C1_4CE5"
+bank = 0xC1
+addr = "4CE5"
+emit = true
+entry_m = 1
+entry_x = 1
+
+[[func]]
+name = "bank_C1_4D0F"
+bank = 0xC1
+addr = "4D0F"
+emit = true
+entry_m = 1
+entry_x = 1

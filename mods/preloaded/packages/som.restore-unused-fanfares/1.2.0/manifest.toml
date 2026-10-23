@@ -2,17 +2,12 @@ format_version = 1
 id = "som.restore-unused-fanfares"
 version = "1.2.0"
 name = "Restore Unused Fanfares"
-author = "Kethinov (port to the Italian translation)"
+author = "Kethinov"
 description = "Plays the two unused fanfares: one when receiving the Sea Hare's Tail, one when receiving the Moogle Belt."
 resolver = "declarative"
 
-# The Italian translation (Mumble Translation v2.0) this executable verifies.
-[[target]]
-game_id = "secret-of-mana"
-rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
-
-# The original US release the language pack starts from: the same game, before
-# the translation, which the pack turns into the image above in memory.
+# The original US release the player provides. The Italian translation, when
+# selected in the launcher, is applied to it in memory before the mods.
 [[target]]
 game_id = "secret-of-mana"
 rom_sha256 = "4c15013131351e694e05f22e38bb1b3e4031dedac77ec75abecebe8520d82d5f"
@@ -22,14 +17,9 @@ rom_sha256 = "4c15013131351e694e05f22e38bb1b3e4031dedac77ec75abecebe8520d82d5f"
 id = "restore"
 name = "Restore Unused Fanfares"
 group = "Music"
-description = "Kethinov's Restore Unused Fanfares 1.2, relocated to the Italian ROM. Applied in memory at launch; the ROM file is never modified. Takes effect on the next launch."
+description = "Kethinov's Restore Unused Fanfares 1.2, for the English and the Italian game. Applied in memory at launch; the ROM file is never modified. Takes effect on the next launch."
 default_enabled = false
 
-# Same three records as the original patch, moved to where the translation
-# keeps them (US 09B923/09CA6E/0A0E44 -> 09A6BD/09B6D1/0A0DE2). src/som_main.c
-# applies it before SnesInit and checks the result against target_sha256.
-[[patch]]
-feature = "restore"
-id = "fanfares"
-file = "restore-unused-fanfares-it.ips"
-target_sha256 = "96b0d01ea873595bc5343a0cb7786c9abfe53febb2e1b495b34d7cc84eb9ce40"
+# Same three records as the original patch. src/som_main.c applies them in
+# memory before SnesInit, at the US offsets (09B923/09CA6E/0A0E44) or, with the
+# Italian translation, where it keeps them (09A6CA/09B6DF/0A0DE2).

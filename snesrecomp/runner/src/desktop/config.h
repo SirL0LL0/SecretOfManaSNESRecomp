@@ -63,6 +63,10 @@ enum {
   kKeys_ControlsP7_Last = kKeys_ControlsP7 + 11,
   kKeys_ControlsP8,
   kKeys_ControlsP8_Last = kKeys_ControlsP8 + 11,
+  /* Append commands so existing ids and positional defaults stay intact. */
+  kKeys_ToggleVSync,
+  kKeys_ToggleFrameBlend,
+  kKeys_ToggleRunAhead,
   kKeys_Total,
 };
 
@@ -116,6 +120,11 @@ typedef struct Config {
   // Set from the launcher's dashboard checkbox. Force the launcher back with the
   // --launcher argument or by setting SkipLauncher = 0 in config.ini.
   bool skip_launcher;
+  /* [General] Language: index into the title's language list (0 = the
+   * first, the release's own); LanguageFile: the file a language needs, e.g.
+   * a translation patch the player supplies. */
+  int language;
+  char language_file[512];
   bool expose_coverage_mod;
   int coverage_capture; /* -1 absent: use Mods selection */
 
@@ -219,6 +228,16 @@ enum {
 };
 
 extern Config g_config;
+
+/* Set when a config parameter has been changed live this session: the
+ * volume/fullscreen hotkeys, any snesrecomp_set_* helper (host_api.h), or a
+ * game that writes a g_config field directly (e.g. the pause menu's Display
+ * rows). The shutdown path rewrites config.ini from it so the launcher opens
+ * on the settings the player left. If you write a g_config field yourself,
+ * set this or the write will not be persisted. Declared here rather than in
+ * host_api.h so a game that only includes config.h can mark its writes
+ * without pulling in the desktop host's API header. */
+extern bool g_config_dirty;
 
 void ConfigUseStateMenuDefaults(void);
 /* Opt in before parsing: binds [KeyMap] OpenLauncher to Ctrl+L by default. */

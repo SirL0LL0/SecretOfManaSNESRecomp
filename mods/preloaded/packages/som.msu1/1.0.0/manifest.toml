@@ -6,13 +6,8 @@ author = "DarkShock (MSU-1 hack), David Thomas / GinBunBun, NTI Productions (mus
 description = "CD-quality music through MSU-1, from DarkShock's Secret of Mana MSU-1 hack v1.0."
 resolver = "declarative"
 
-# The Italian translation (Mumble Translation v2.0) this executable verifies.
-[[target]]
-game_id = "secret-of-mana"
-rom_sha256 = "8622ebc30446c5a620a110f2fc2622aac82c6fa75f946b666b221592d57cc275"
-
-# The original US release the language pack starts from: the same game, before
-# the translation, which the pack turns into the image above in memory.
+# The original US release the player provides. The Italian translation, when
+# selected in the launcher, is applied to it in memory before the mods.
 [[target]]
 game_id = "secret-of-mana"
 rom_sha256 = "4c15013131351e694e05f22e38bb1b3e4031dedac77ec75abecebe8520d82d5f"
