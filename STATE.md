@@ -123,6 +123,9 @@ Script: `press X N` = N frame di pressione **+ 1 idle**; i tag dei dump possono 
    `LDX #ptr; JSR $5C2A` in C0) sono `live_operand` in `config/bankc0.cfg`. Launcher e menu in inglese
    per default, in italiano solo con Italiano selezionato. Il pacchetto `som.language` e le
    "translation fixes" sono stati rimossi (la v2.01 corregge già il ponte).
+   **Title screen** (2026-10-23): sempre attivo il ripristino dell'immagine giapponese di Queue (da
+   Secret of Mana Plus 2.1 di Tomm): `src/som_title_data.c` + `SomApplyTitle`; C1:4CF7 -> EF:F800,
+   immagine a 3 MB, nessun codice compilato cambia (C1:4CE5 e l'intro in WRAM sono LLE).
 1. **Ritardo di 1-2 frame dopo il primo Start**: piccolo, ma da spiegare (budget cicli del frame? costo
    dei polling in vblank?). La chiave di allineamento è lo scroll BG1 (le due timeline coincidono
    esattamente fino a f2550).

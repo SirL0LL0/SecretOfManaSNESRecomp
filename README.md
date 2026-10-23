@@ -52,9 +52,11 @@ Escape, or Select+Start on the pad (`[Controller] MenuGesture` in config.ini), o
 
 The host clock catches up after short hitches (up to four frames, the size of the audio cushion) instead of dropping the lost time. Audio is produced in guest time, so the dropped time used to drain the cushion every 10-25 seconds and each underflow faded the music out and back in. A longer stall still re-anchors the clock.
 
-## Mods
+## Title screen
 
-**Mods → Graphics → Title Screen Restoration** (off by default) restores the Japanese title image: the whole Mana Tree in the background, where the English release shows a cropped, enlarged and blurry one. It is Queue's restoration, as shipped in Tomm's Secret of Mana Plus 2.1. **The patch is not distributed here**: choose any of the archive's `SoMPlus2.1.ips` files (romhacking.net hack 8491) on the mod's row. `src/som_main.c` applies that patch to a copy of the image and takes only two ranges from it: the operand of the intro's `JML $7EAF0B` at C1:4CF7, redirected to EF:F800, and EF:C000–EF:F8A0, the compressed image and the routine that points the intro's WRAM code at it before making the same jump. Their SHA-256 is checked, so any of the six difficulty patches is accepted, and the rest of Secret of Mana Plus is not applied. The image grows to 3 MB. No compiled code changes: C1:4CE5 and the WRAM intro already run as LLE. It works in English and in Italian (the Mumble v2.01 patch does not include this restoration; v2.0 did).
+The title screen always shows the Japanese image, the whole Mana Tree in the background, where the English release shows a cropped, enlarged and blurry one. This is **Queue**'s title screen image restoration, as shipped in **Tomm**'s Secret of Mana Plus 2.1 ([hackofmana.com](https://hackofmana.com/), romhacking.net hack 8491); the bytes are taken unchanged from that hack and are in `src/som_title_data.c`. `src/som_main.c` (`SomApplyTitle`) writes them into the image in memory before `SnesInit`, in English and in Italian: the operand of the intro's `JML $7EAF0B` at C1:4CF7 is redirected to EF:F800, Queue's routine, which points the intro's WRAM code at the compressed image at EF:C000 and then makes the same jump. The image grows to 3 MB. No compiled code changes: C1:4CE5 and the WRAM intro already run as LLE. The Mumble v2.01 translation does not include this restoration (v2.0 did).
+
+## Mods
 
 **Mods → Music → Restore Unused Fanfares** (off by default) plays the two unused fanfares, for the Sea Hare's Tail and the Moogle Belt. It is Kethinov's patch, version 1.2: `src/som_main.c` writes its three records to the in-memory image before `SnesInit`, at the US offsets or, in Italian, where the translation keeps them, after checking the bytes it replaces. The ROM file on disk is never modified. The change takes effect at the next launch.
 
@@ -83,3 +85,12 @@ The desktop launcher exposes an optional, default-off capture switch under **Mod
 Diagnostic builds also keep a bounded PPU/DMA history. The exit report records the video mode, enabled main/subscreen layers, VRAM/CGRAM occupancy, and graphics DMA activity per frame; this helps distinguish a missing renderer path from missing graphics uploads. Set `SOM_ENABLE_DEBUG_COVERAGE=OFF` at configure time to disable the developer diagnostics and this history together.
 
 Each captured session writes a unique manifest (`.json`) and event journal (`.jsonl`) under `coverage/runs/secret-of-mana/` in the project folder. The launcher derives this path from the executable location, so it works when started from `build/`; an explicit `SNESRECOMP_COVERAGE_DIR` environment variable still overrides it. This capture is independent of the automated measurement script above.
+
+## Credits
+
+- SNESRecomp and recomp-ui: mstan and contributors.
+- Italian translation: Mumble Translations (Clomax, Mog, _Ombra_), v2.01 — [mumble.romhacking.it](https://mumble.romhacking.it/som.html).
+- Title screen image restoration: Queue; taken from Secret of Mana Plus 2.1 by Tomm.
+- Restore Unused Fanfares 1.2: Kethinov.
+- MSU-1 hack v1.0: DarkShock; music by David Thomas / GinBunBun, NTI Productions.
+- Cheat codes: Almar's Guides (Pro Action Replay), RPGClassics (RAM map, Galoob Game Genie list).

@@ -34,6 +34,7 @@
 #include "sha256.h"
 #include "som_frame_driver.h"
 #include "som_cheats.h"
+#include "som_title_data.h"
 #include "som_msu1_patch.h"
 #include "som_music.h"
 #include "som_spc_player.h"
@@ -224,94 +225,34 @@ static int SomApplyLanguage(uint8_t **rom, size_t *size, char *error, size_t err
     return 1;
 }
 
-/* Mods page → Graphics → Title Screen Restoration (som.title-restoration):
- * Queue's restoration of the Japanese title image, as shipped in Secret of
- * Mana Plus 2.1 (not distributed here: the player chooses one of its .ips
- * files). Only two ranges of that hack are used. C1:4CF6 is the intro's
+/* Title screen image restoration, always on: Queue's restoration of the
+ * Japanese title image (the whole Mana Tree in the background; the English
+ * release crops and enlarges it), as shipped in Secret of Mana Plus 2.1 by
+ * Tomm. The bytes are in som_title_data.c. C1:4CF6 is the intro's
  * JML $7EAF0B into the routine it copied to WRAM; the restoration points it
- * at EF:F800, which patches that WRAM code to read the full image from
- * EF:C000 and then makes the same jump. Neither C1:4CE5 nor the WRAM intro
- * is recompiled (both already run as LLE), so no compiled code changes: the
- * image grows to 3 MB and the ranges are copied in. The ranges are identical
- * in all six SoMPlus 2.1 patches, so any of them is accepted. */
-#define SOM_TITLE_PACKAGE "som.title-restoration"
-#define SOM_TITLE_FEATURE "restore"
-#define SOM_TITLE_RESOURCE "somplus"
-static const struct { uint32_t from, to; } kSomTitleRanges[] = {
-    {0x014CF7, 0x014CFA},   /* JML operand: 7E:AF0B -> EF:F800 */
-    {0x2FC000, 0x2FF8A0},   /* EF:C000 compressed image, EF:F800 its routine */
-};
-static const size_t kSomTitleImageSize = 0x300000;
-/* SHA-256 of the two ranges, in order, of the US ROM with any SoMPlus 2.1 patch. */
-static const char kSomTitleRangesSha256[] =
-    "84dd9f0ddfef1176331709117f6b768cb43a69007766e8e671ade27bebbbd9a2";
-
+ * at EF:F800, Queue's routine, which patches that WRAM code to read the full
+ * image from EF:C000 and then makes the same jump. Neither C1:4CE5 nor the
+ * WRAM intro is recompiled (both already run as LLE), so no compiled code
+ * changes: the image grows to 3 MB and the two ranges are written in. */
 static int SomApplyTitle(uint8_t **rom, size_t *size, char *error, size_t error_cap) {
-#if SNESRECOMP_ENABLE_MODS
-    if (!snes_mod_runtime_feature_enabled_c(SOM_TITLE_PACKAGE, SOM_TITLE_FEATURE)) return 1;
     static const uint8_t kOriginalJump[3] = {0x0B, 0xAF, 0x7E};
-    if (*size < 0x014CFA || memcmp(*rom + 0x014CF7, kOriginalJump, 3) != 0) {
-        fprintf(stderr, "som: Title Screen Restoration: unexpected bytes at C1:4CF7, skipped\n");
+    if (*size < SOM_TITLE_JUMP_AT + 3 || *size > SOM_TITLE_BLOCK_AT ||
+        memcmp(*rom + SOM_TITLE_JUMP_AT, kOriginalJump, 3) != 0) {
+        fprintf(stderr, "som: title restoration: unexpected image, skipped\n");
         return 1;
     }
-    char path[1024];
-    if (!snes_mod_runtime_resource_path_c(SOM_TITLE_PACKAGE, SOM_TITLE_FEATURE,
-                                          SOM_TITLE_RESOURCE, path, sizeof(path)) || !path[0]) {
-        snprintf(error, error_cap,
-                 "Title Screen Restoration: choose the Secret of Mana Plus 2.1 patch on the Mods page");
-        return 0;
-    }
-    size_t ips_size = 0;
-    uint8_t *ips = SomReadFile(path, &ips_size);
-    if (!ips) {
-        snprintf(error, error_cap, "Title Screen Restoration: cannot read %s", path);
-        return 0;
-    }
-    uint8_t *donor = NULL;
-    size_t donor_size = 0;
-    RomPatchStatus status = snes_rom_patch_apply(*rom, *size, ips, ips_size,
-                                                 16u * 1024u * 1024u, &donor, &donor_size);
-    free(ips);
-    int ok = status == kRomPatch_Ok && donor && donor_size >= kSomTitleImageSize;
-    if (ok) {
-        size_t total = 0;
-        for (size_t i = 0; i < sizeof(kSomTitleRanges) / sizeof(kSomTitleRanges[0]); ++i)
-            total += kSomTitleRanges[i].to - kSomTitleRanges[i].from;
-        uint8_t *joined = (uint8_t *)malloc(total);
-        char hex[65] = "";
-        if (joined) {
-            size_t at = 0;
-            for (size_t i = 0; i < sizeof(kSomTitleRanges) / sizeof(kSomTitleRanges[0]); ++i) {
-                const size_t n = kSomTitleRanges[i].to - kSomTitleRanges[i].from;
-                memcpy(joined + at, donor + kSomTitleRanges[i].from, n);
-                at += n;
-            }
-            HexDigest(joined, total, hex);
-            free(joined);
-        }
-        ok = strcmp(hex, kSomTitleRangesSha256) == 0;
-    }
-    uint8_t *grown = ok ? (uint8_t *)malloc(kSomTitleImageSize) : NULL;
+    uint8_t *grown = (uint8_t *)malloc(SOM_TITLE_IMAGE_SIZE);
     if (!grown) {
-        free(donor);
-        snprintf(error, error_cap,
-                 "Title Screen Restoration: not a Secret of Mana Plus 2.1 patch (%s)",
-                 status != kRomPatch_Ok ? snes_rom_patch_status_text(status) : "title data differs");
+        snprintf(error, error_cap, "out of memory for the title restoration");
         return 0;
     }
     memcpy(grown, *rom, *size);
-    memset(grown + *size, 0, kSomTitleImageSize - *size);
-    for (size_t i = 0; i < sizeof(kSomTitleRanges) / sizeof(kSomTitleRanges[0]); ++i)
-        memcpy(grown + kSomTitleRanges[i].from, donor + kSomTitleRanges[i].from,
-               kSomTitleRanges[i].to - kSomTitleRanges[i].from);
-    grown[0xFFD7] = donor[0xFFD7];            /* header ROM size: 4 MB class */
-    free(donor);
+    memset(grown + *size, 0, SOM_TITLE_IMAGE_SIZE - *size);
+    memcpy(grown + SOM_TITLE_JUMP_AT, kSomTitleJump, sizeof(kSomTitleJump));
+    memcpy(grown + SOM_TITLE_BLOCK_AT, kSomTitleBlock, sizeof(kSomTitleBlock));
+    grown[0xFFD7] = 0x0C;                     /* header ROM size: 4 MB class */
     *rom = grown;
-    *size = kSomTitleImageSize;
-    fprintf(stderr, "som: Title Screen Restoration applied in memory\n");
-#else
-    (void)rom; (void)size; (void)error; (void)error_cap;
-#endif
+    *size = SOM_TITLE_IMAGE_SIZE;
     return 1;
 }
 
@@ -412,7 +353,7 @@ int main(int argc, char **argv) {
     game.after_config = SomMusicInitialize;   /* read msu1.cfg before launch */
     game.on_rom_loaded = NULL;
     game.patch_rom = SomPrepareRom;           /* mods: fanfares, cheats, MSU-1 pack */
-    game.patch_rom_ex = SomPrepareImage;      /* Italiano, then the title restoration */
+    game.patch_rom_ex = SomPrepareImage;      /* Italiano, then the title image */
     game.on_reset = SomMsu1PatchTimelineJumped; /* MSU-1 track after a state load */
     game.before_run_frame = NULL;
     game.after_run_frame = NULL;

@@ -30,7 +30,7 @@ include(${SNESRECOMP_ROOT}/runner/runner.cmake)
 file(GLOB GENERATED_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/generated/*.c")
 set(SOM_COMMON_RUNNER_SOURCES ${SNESRECOMP_RUNNER_SOURCES})
 set(SOM_SOURCES src/som_music.c src/som_spc_music.c src/som_msu1.c src/som_spc_player.c src/som_frame_driver.c
-  src/som_msu1_patch.c src/som_cheats.c)
+  src/som_msu1_patch.c src/som_cheats.c src/som_title_data.c)
 # MSU-1 mod (src/som_msu1_patch.c): the music-command routine C3:0004 is
 # reached through som_msu_sound_entry, which runs DarkShock's MSU_Main and
 # then the recompiled original. These are the generated files that call it;
