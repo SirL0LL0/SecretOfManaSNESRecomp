@@ -131,8 +131,8 @@ Script: `press X N` = N frame di pressione **+ 1 idle**; i tag dei dump possono 
    esattamente fino a f2550).
 2. Le differenze residue di variabili (`$00F4`, `$02B1`, `$04C3`, `$04D6`, `$04DE`) sono **piccole
    differenze di contatori/indici**: coerenti con il ritardo di 1-2 frame, non con un bug.
-3. Verificare che l'immagine ROM usata dal recomp sia **identica** al ROM puro (i mod sono off per default,
-   ma `som_msu1_patch.c` è compilato dentro): confrontare l'hash dell'immagine in memoria.
+3. Il supporto MSU-1 (mod e vecchio player msu1.cfg) è stato rimosso il 2026-10-23 su richiesta dell'utente;
+   l'immagine in memoria differisce dal ROM puro solo per il ripristino del titolo (sempre attivo) e i mod scelti.
 4. I 5 KB "mancanti" in VRAM `0xEC80-0xFFFF` sono **spazzatura non inizializzata di Mesen** (il gioco li
    azzera in entrambi; nel recomp erano già zero). Nessun upload manca: confermato dal log PPU
    (nessuna scrittura a `$2118/$2119/$2120` in quelle frame).

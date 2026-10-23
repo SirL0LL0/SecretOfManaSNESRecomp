@@ -35,8 +35,6 @@
 #include "som_frame_driver.h"
 #include "som_cheats.h"
 #include "som_title_data.h"
-#include "som_msu1_patch.h"
-#include "som_music.h"
 #include "som_spc_player.h"
 
 /* Trace-build hooks the framework leaves to the port. */
@@ -303,18 +301,15 @@ static int SomApplyFanfares(uint8_t *rom, size_t size, char *error, size_t error
     return 1;
 }
 
-/* The mods that act before SnesInit: the fanfares IPS (checked against its
- * digest, so first), the ROM-data cheats, and the MSU-1 pack. */
+/* The mods that act before SnesInit: the fanfares (every byte checked, so
+ * first) and the ROM-data cheats. */
 static int SomPrepareRom(uint8_t *rom, size_t size, char *error, size_t error_cap) {
     if (!SomApplyFanfares(rom, size, error, error_cap)) return 0;
-    return
-           SomCheatsPatchRom(rom, size, error, error_cap) &&
-           SomMsu1PatchPrepare(error, error_cap);
+    return SomCheatsPatchRom(rom, size, error, error_cap);
 }
 
 int main(int argc, char **argv) {
     SomConfigureCoverageDirectory();
-    SomMsu1PatchRegister();                   /* Mods → Music → MSU-1 Music */
     SomCheatsRegister();                      /* Mods → Cheats → Cheats */
     SnesDesktopHostGame game = {0};
 
@@ -338,7 +333,7 @@ int main(int argc, char **argv) {
     game.num_players = 1;
     game.debug_port = 0;                      /* 0 => 4377 */
     game.widescreen_supported = 1;
-    game.msu1_supported = 0;                  /* SomMsu1 is driven by msu1.cfg */
+    game.msu1_supported = 0;
     game.simulation_hz = 0;                   /* NTSC 60.0988 Hz */
     game.frame_width = 256;
     game.frame_height = 224;
@@ -350,11 +345,11 @@ int main(int argc, char **argv) {
     /* ── Hooks ────────────────────────────────────────────────────────── */
     game.create_spc_player = SomSpcPlayer_Create;
     game.mods_provider = NULL;
-    game.after_config = SomMusicInitialize;   /* read msu1.cfg before launch */
+    game.after_config = NULL;
     game.on_rom_loaded = NULL;
-    game.patch_rom = SomPrepareRom;           /* mods: fanfares, cheats, MSU-1 pack */
+    game.patch_rom = SomPrepareRom;           /* mods: fanfares, cheats */
     game.patch_rom_ex = SomPrepareImage;      /* Italiano, then the title image */
-    game.on_reset = SomMsu1PatchTimelineJumped; /* MSU-1 track after a state load */
+    game.on_reset = NULL;
     game.before_run_frame = NULL;
     game.after_run_frame = NULL;
     game.keep_pacing_debt = NULL;

@@ -29,14 +29,7 @@ endif()
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
 file(GLOB GENERATED_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/generated/*.c")
 set(SOM_COMMON_RUNNER_SOURCES ${SNESRECOMP_RUNNER_SOURCES})
-set(SOM_SOURCES src/som_music.c src/som_spc_music.c src/som_msu1.c src/som_spc_player.c src/som_frame_driver.c
-  src/som_msu1_patch.c src/som_cheats.c src/som_title_data.c)
-# MSU-1 mod (src/som_msu1_patch.c): the music-command routine C3:0004 is
-# reached through som_msu_sound_entry, which runs DarkShock's MSU_Main and
-# then the recompiled original. These are the generated files that call it;
-# bankc3_v2.c, which defines it, is left alone.
-set_source_files_properties(generated/bankc0_v2.c generated/dispatch_v2.c
-  PROPERTIES COMPILE_DEFINITIONS "bank_C3_0004_M1X0=som_msu_sound_entry")
+set(SOM_SOURCES src/som_spc_player.c src/som_frame_driver.c src/som_cheats.c src/som_title_data.c)
 set(SOM_HEADLESS_RUNNER_SOURCES ${SOM_COMMON_RUNNER_SOURCES})
 list(REMOVE_ITEM SOM_HEADLESS_RUNNER_SOURCES
   "${SNESRECOMP_RUNNER_ROOT}/src/diagnostics/replay_writer.c"
