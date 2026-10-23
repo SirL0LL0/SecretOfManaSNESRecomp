@@ -50,7 +50,12 @@ if (-not $env:INCLUDE -and $env:OS -eq 'Windows_NT') {
     $VsInstall = & $VsWhere -latest -products '*' -property installationPath
     $VsDevCmd = Join-Path $VsInstall 'Common7\Tools\VsDevCmd.bat'
     if (Test-Path -LiteralPath $VsDevCmd) {
-      $EnvLines = & cmd.exe /d /c "call `"$VsDevCmd`" -arch=x64 -host_arch=x64 >nul && set"
+      # VsDevCmd calls vswhere by name and reports on stderr, which
+      # Windows PowerShell would turn into a terminating error.
+      $env:PATH = "$(Split-Path -Parent $VsWhere);$env:PATH"
+      $ErrorActionPreference = 'Continue'
+      $EnvLines = & cmd.exe /d /c "call `"$VsDevCmd`" -arch=x64 -host_arch=x64 >nul 2>nul && set"
+      $ErrorActionPreference = 'Stop'
       foreach ($Line in $EnvLines) {
         if ($Line -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1],$Matches[2],'Process') }
       }
@@ -59,6 +64,8 @@ if (-not $env:INCLUDE -and $env:OS -eq 'Windows_NT') {
   }
 }
 $Build = Join-Path $Root 'build'
+# CMake prints warnings on stderr; failures are caught by the exit codes below.
+$ErrorActionPreference = 'Continue'
 cmake -S $Root -B $Build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DSNESRECOMP_ROOT=$Snes" "-DRECOMP_UI_ROOT=$Ui"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 cmake --build $Build --config Release --parallel
